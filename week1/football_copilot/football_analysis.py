@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 
 import pandas as pd
+import numpy as np
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -137,6 +138,84 @@ def calculate_match_metrics(matches: pd.DataFrame) -> dict:
         ),
     }
 
+
+def assess_recent_form_change(
+    team_matches: pd.DataFrame,
+    recent_match_count: int = 6,
+    bootstrap_samples: int = 5000,
+    random_seed: int = 82,
+) -> dict:
+    """Assess whether recent PPG differs meaningfully from earlier form."""
+
+    minimum_matches = recent_match_count * 2
+
+    if len(team_matches) < minimum_matches:
+        return {
+            "status": "insufficient_data",
+            "message": (
+                f"At least {minimum_matches} matches are required "
+                "to compare recent and previous form."
+            ),
+        }
+
+    recent_matches = team_matches.tail(recent_match_count)
+    previous_matches = team_matches.iloc[:-recent_match_count]
+
+    recent_points = recent_matches["points"].to_numpy(dtype=float)
+    previous_points = previous_matches["points"].to_numpy(dtype=float)
+
+    recent_ppg = float(recent_points.mean())
+    previous_ppg = float(previous_points.mean())
+    observed_difference = recent_ppg - previous_ppg
+
+    rng = np.random.default_rng(random_seed)
+
+    bootstrap_differences = []
+
+    for _ in range(bootstrap_samples):
+        recent_sample = rng.choice(
+            recent_points,
+            size=len(recent_points),
+            replace=True,
+        )
+
+        previous_sample = rng.choice(
+            previous_points,
+            size=len(previous_points),
+            replace=True,
+        )
+
+        bootstrap_differences.append(
+            recent_sample.mean() - previous_sample.mean()
+        )
+
+    lower_bound, upper_bound = np.percentile(
+        bootstrap_differences,
+        [2.5, 97.5],
+    )
+
+    if lower_bound > 0:
+        assessment = "improving"
+    elif upper_bound < 0:
+        assessment = "declining"
+    else:
+        assessment = "inconclusive"
+
+    return {
+        "status": "complete",
+        "recent_matches": len(recent_matches),
+        "previous_matches": len(previous_matches),
+        "recent_ppg": round(recent_ppg, 2),
+        "previous_ppg": round(previous_ppg, 2),
+        "ppg_difference": round(observed_difference, 2),
+        "confidence_interval_95": {
+            "lower": round(float(lower_bound), 2),
+            "upper": round(float(upper_bound), 2),
+        },
+        "assessment": assessment,
+    }
+
+
 def build_team_profile(team_matches: pd.DataFrame) -> dict:
     """Build season, recent, home and away team profiles."""
 
@@ -214,6 +293,8 @@ def calculate_league_table(
         ).unique()
     )
 
+    played = current_round-9
+
     league_table = []
 
     for team in teams:
@@ -228,6 +309,7 @@ def calculate_league_table(
         league_table.append(
             {
                 "team": team,
+                "played": played,
                 "wins": profile["season"]["wins"],
                 "draws": profile["season"]["draws"],
                 "losses": profile["season"]["losses"],
@@ -406,6 +488,341 @@ def compare_teams(team: str,
     }
 
 
+def analyse_fixture_difficulty(
+    team_matches: pd.DataFrame,
+    league_table: pd.DataFrame,
+    match_count: int = 6,
+) -> dict:
+    """Assess recent opponent strength and venue balance."""
+
+    if team_matches.empty:
+        raise ValueError(
+            "Cannot analyse fixture difficulty from an empty match dataset."
+        )
+
+    if league_table.empty:
+        raise ValueError(
+            "Cannot analyse fixture difficulty from an empty league table."
+        )
+
+    if match_count <= 0:
+        raise ValueError(
+            "match_count must be greater than zero."
+        )
+
+    recent_matches = (
+        team_matches
+        .tail(match_count)
+        .copy()
+    )
+
+    position_lookup = league_table[
+        ["team", "position", "points", "played"]
+    ].copy()
+
+    position_lookup["opponent_ppg"] = (
+        position_lookup["points"]
+        / position_lookup["played"]
+    )
+
+    position_lookup = position_lookup.rename(
+        columns={
+            "team": "opponent",
+            "position": "opponent_position",
+        }
+    )
+
+    position_lookup = position_lookup[
+        [
+            "opponent",
+            "opponent_position",
+            "opponent_ppg",
+        ]
+    ]
+
+    recent_matches = recent_matches.merge(
+        position_lookup,
+        on="opponent",
+        how="left",
+    )
+
+    missing_positions = recent_matches[
+        "opponent_position"
+    ].isna()
+
+    if missing_positions.any():
+        missing_opponents = sorted(
+            recent_matches.loc[
+                missing_positions,
+                "opponent",
+            ].unique()
+        )
+
+        raise ValueError(
+            "League positions were not found for: "
+            f"{missing_opponents}"
+        )
+
+    matches_analysed = len(recent_matches)
+
+    opponent_positions = recent_matches[
+        "opponent_position"
+    ]
+
+    opponent_ppg = recent_matches[
+        "opponent_ppg"
+    ]
+
+    median_opponent_position = float(
+        opponent_positions.median()
+    )
+
+    average_opponent_ppg = float(
+        opponent_ppg.mean()
+    )
+
+    position_range = int(
+        opponent_positions.max()
+        - opponent_positions.min()
+    )
+
+    position_standard_deviation = float(
+        opponent_positions.std(ddof=0)
+    )
+
+    league_size = len(league_table)
+
+    top_quarter_limit = league_size * 0.25
+    halfway_limit = league_size * 0.50
+    third_quarter_limit = league_size * 0.75
+
+    top_quarter_opponents = int(
+        (
+            opponent_positions
+            <= top_quarter_limit
+        ).sum()
+    )
+
+    upper_middle_opponents = int(
+        (
+            (
+                opponent_positions
+                > top_quarter_limit
+            )
+            & (
+                opponent_positions
+                <= halfway_limit
+            )
+        ).sum()
+    )
+
+    lower_middle_opponents = int(
+        (
+            (
+                opponent_positions
+                > halfway_limit
+            )
+            & (
+                opponent_positions
+                <= third_quarter_limit
+            )
+        ).sum()
+    )
+
+    bottom_quarter_opponents = int(
+        (
+            opponent_positions
+            > third_quarter_limit
+        ).sum()
+    )
+
+    if (
+        top_quarter_opponents > 0
+        and bottom_quarter_opponents > 0
+        and position_standard_deviation
+        >= league_size * 0.25
+    ):
+        schedule_profile = "mixed extremes"
+
+    elif (
+        top_quarter_opponents
+        >= matches_analysed / 2
+    ):
+        schedule_profile = (
+            "mostly strong opposition"
+        )
+
+    elif (
+        bottom_quarter_opponents
+        >= matches_analysed / 2
+    ):
+        schedule_profile = (
+            "mostly weak opposition"
+        )
+
+    elif (
+        position_standard_deviation
+        <= league_size * 0.10
+    ):
+        schedule_profile = (
+            "consistent opponent strength"
+        )
+
+    else:
+        schedule_profile = (
+            "mixed opponent strength"
+        )
+
+    home_matches = int(
+        recent_matches["is_home"].sum()
+    )
+
+    away_matches = (
+        matches_analysed - home_matches
+    )
+
+    home_match_percentage = (
+        home_matches
+        / matches_analysed
+        * 100
+    )
+
+    away_match_percentage = (
+        away_matches
+        / matches_analysed
+        * 100
+    )
+
+    if home_match_percentage >= 65:
+        venue_balance = "home-heavy"
+
+    elif home_match_percentage <= 35:
+        venue_balance = "away-heavy"
+
+    else:
+        venue_balance = "balanced"
+
+    hardest_match = recent_matches.loc[
+        recent_matches[
+            "opponent_position"
+        ].idxmin()
+    ]
+
+    easiest_match = recent_matches.loc[
+        recent_matches[
+            "opponent_position"
+        ].idxmax()
+    ]
+
+    recent_opponents = []
+
+    for _, match in recent_matches.iterrows():
+        recent_opponents.append(
+            {
+                "opponent": match["opponent"],
+                "position": int(
+                    match["opponent_position"]
+                ),
+                "ppg": round(
+                    float(
+                        match["opponent_ppg"]
+                    ),
+                    2,
+                ),
+                "venue": (
+                    "home"
+                    if match["is_home"]
+                    else "away"
+                ),
+            }
+        )
+
+    return {
+        "matches_requested": match_count,
+        "matches_analysed": (
+            matches_analysed
+        ),
+        "median_opponent_position": round(
+            median_opponent_position,
+            2,
+        ),
+        "average_opponent_ppg": round(
+            average_opponent_ppg,
+            2,
+        ),
+        "position_range": position_range,
+        "position_standard_deviation": round(
+            position_standard_deviation,
+            2,
+        ),
+        "top_quarter_opponents": (
+            top_quarter_opponents
+        ),
+        "upper_middle_opponents": (
+            upper_middle_opponents
+        ),
+        "lower_middle_opponents": (
+            lower_middle_opponents
+        ),
+        "bottom_quarter_opponents": (
+            bottom_quarter_opponents
+        ),
+        "schedule_profile": (
+            schedule_profile
+        ),
+        "home_matches": home_matches,
+        "away_matches": away_matches,
+        "home_match_percentage": round(
+            home_match_percentage,
+            1,
+        ),
+        "away_match_percentage": round(
+            away_match_percentage,
+            1,
+        ),
+        "venue_balance": venue_balance,
+        "hardest_opponent": {
+            "team": hardest_match[
+                "opponent"
+            ],
+            "position": int(
+                hardest_match[
+                    "opponent_position"
+                ]
+            ),
+            "ppg": round(
+                float(
+                    hardest_match[
+                        "opponent_ppg"
+                    ]
+                ),
+                2,
+            ),
+        },
+        "easiest_opponent": {
+            "team": easiest_match[
+                "opponent"
+            ],
+            "position": int(
+                easiest_match[
+                    "opponent_position"
+                ]
+            ),
+            "ppg": round(
+                float(
+                    easiest_match[
+                        "opponent_ppg"
+                    ]
+                ),
+                2,
+            ),
+        },
+        "recent_opponents": (
+            recent_opponents
+        ),
+    }
+
+
 def gather_match_context(
         data: pd.DataFrame,
         team: str,
@@ -440,17 +857,57 @@ def gather_match_context(
         "league_table": league_table,
     }
 
-
 def main() -> None:
     data = load_data(DATA_FILE)
 
-    context = gather_match_context(
+    team = "QPR"
+    league = "Championship"
+    current_round = 25
+
+    team_matches = get_team_matches(
         data=data,
-        team="QPR",
-        current_round=25,
+        team=team,
+        current_round=current_round,
     )
 
-    print(context)
+    league_table = calculate_league_table(
+        data=data,
+        league=league,
+        current_round=current_round,
+    )
+
+    fixture_difficulty = (
+        analyse_fixture_difficulty(
+            team_matches=team_matches,
+            league_table=league_table,
+            match_count=6,
+        )
+    )
+
+    print(
+        f"\n===== {team} Recent Fixture "
+        f"Difficulty =====\n"
+    )
+
+    for key, value in (
+        fixture_difficulty.items()
+    ):
+        if key == "recent_opponents":
+            print("\nRecent opponents:")
+
+            for opponent in value:
+                print(
+                    f"- {opponent['opponent']}: "
+                    f"position "
+                    f"{opponent['position']}, "
+                    f"PPG {opponent['ppg']}, "
+                    f"{opponent['venue']}"
+                )
+
+        else:
+            print(f"{key:<35} {value}")
+
 
 if __name__ == "__main__":
     main()
+

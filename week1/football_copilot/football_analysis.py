@@ -406,22 +406,51 @@ def compare_teams(team: str,
     }
 
 
+def gather_match_context(
+        data: pd.DataFrame,
+        team: str,
+        current_round: int,
+)  -> dict:
+    """Gather all data required for a pre-match report."""
 
-def main() -> None:
-    
-    data = load_data(DATA_FILE)
-    team = "QPR"
-    current_round = 25
     fixture = get_next_fixture(
         data=data,
         team=team,
         current_round=current_round,
     )
-    
-    print("\nNext fixture:\n")
 
-    for key, value in fixture.items():
-        print(f"{key:<20} {value}")
+    league_table = calculate_league_table(
+        data=data,
+        league=fixture["league"],
+        current_round=current_round,
+    )
+
+    comparison = compare_teams(
+        team=team,
+        opponent=fixture["opponent"],
+        team_venue=fixture["venue"],
+        current_round=current_round,
+        data=data,
+        league_table=league_table,
+    )
+
+    return {
+        "fixture": fixture,
+        "comparison": comparison,
+        "league_table": league_table,
+    }
+
+
+def main() -> None:
+    data = load_data(DATA_FILE)
+
+    context = gather_match_context(
+        data=data,
+        team="QPR",
+        current_round=25,
+    )
+
+    print(context)
 
 if __name__ == "__main__":
     main()

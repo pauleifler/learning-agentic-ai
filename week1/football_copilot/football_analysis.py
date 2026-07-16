@@ -265,6 +265,15 @@ def calculate_league_table(
     return league_table_df
 
 
+def get_team_position(league_table: pd.DataFrame, team: str) -> int:
+    """Get the current position of a team in the league table."""
+    matching_rows = league_table[league_table["team"] == team]
+
+    if matching_rows.empty:
+        raise ValueError(f"{team} is not in the league table.")
+    
+    return int(matching_rows.iloc[0]["position"])
+
 
 def main() -> None:
     data = load_data(DATA_FILE)
@@ -292,7 +301,13 @@ def main() -> None:
         current_round=25,
     )
 
+    position = get_team_position(league_table, team)
+
     print(league_table.to_string(index=False))
+    print(
+        f"\n{team} are in position {position} "
+        f"after round {current_round}."
+    )
 
 if __name__ == "__main__":
     main()

@@ -275,11 +275,106 @@ def get_team_position(league_table: pd.DataFrame, team: str) -> int:
     return int(matching_rows.iloc[0]["position"])
 
 
+def compare_teams(team: str,
+                  opponent: str,
+                  league_table: pd.DataFrame,
+                  data: pd.DataFrame,
+                  current_round: int,
+                  team_venue: str
+                  ) -> dict:
+    """Compare two teams based on their profiles."""
+    
+    team_matches = get_team_matches(
+        data,
+        team,
+        current_round,
+    ) 
+    
+    opponent_matches = get_team_matches(
+        data,
+        opponent,
+        current_round,
+    )
+
+    team_profile = build_team_profile(team_matches)
+    opponent_profile = build_team_profile(opponent_matches)
+
+    team_position = get_team_position(league_table, team)
+    opponent_position = get_team_position(league_table, opponent)
+
+    if team_venue == "home":
+        team_venue_profile = team_profile["home"]
+        opponent_venue_profile = opponent_profile["away"]
+        opponent_venue = "away"
+    else:
+        team_venue_profile = team_profile["away"]
+        opponent_venue_profile = opponent_profile["home"]
+        opponent_venue = "home"
+
+    return {
+        "team": team,
+        "opponent": opponent,
+        "team_venue": team_venue,
+        "opponent_venue": opponent_venue,
+        "team_position": team_position,
+        "opponent_position": opponent_position,
+        "team_season_ppg": round(team_profile["season"]["ppg"], 2),
+        "opponent_season_ppg": round(
+            opponent_profile["season"]["ppg"],
+            2,
+        ),
+        "team_recent_ppg": round(
+            team_profile["recent_form"]["ppg"],
+            2,
+        ),
+        "opponent_recent_ppg": round(
+            opponent_profile["recent_form"]["ppg"],
+            2,
+        ),
+        "team_venue_ppg": round(
+            team_venue_profile["ppg"],
+            2,
+        ),
+        "opponent_venue_ppg": round(
+            opponent_venue_profile["ppg"],
+            2,
+        ),
+        "team_venue_goals_scored_per_game": round(
+            team_venue_profile["goals_scored_per_game"],
+            2,
+        ),
+        "opponent_venue_goals_scored_per_game": round(
+            opponent_venue_profile["goals_scored_per_game"],
+            2,
+        ),
+        "team_venue_goals_conceded_per_game": round(
+            team_venue_profile["goals_conceded_per_game"],
+            2,
+        ),
+        "opponent_venue_goals_conceded_per_game": round(
+            opponent_venue_profile["goals_conceded_per_game"],
+            2,
+        ),
+        "team_form_change_ppg": round(
+            team_profile["form_change_ppg"],
+            2,
+        ),
+        "opponent_form_change_ppg": round(
+            opponent_profile["form_change_ppg"],
+            2,
+        ),
+    }
+
+
+
 def main() -> None:
     data = load_data(DATA_FILE)
 
-    team = "Leeds"
+    league = "Championship"
+    team = "QPR"
+    opponent = "Bristol City"
     current_round = 25
+    team_venue = "home"
 
     team_matches = get_team_matches(
         data,
@@ -303,11 +398,17 @@ def main() -> None:
 
     position = get_team_position(league_table, team)
 
-    print(league_table.to_string(index=False))
-    print(
-        f"\n{team} are in position {position} "
-        f"after round {current_round}."
+    comparison = compare_teams(
+        team=team,
+        opponent=opponent,
+        current_round=current_round,
+        data=data,
+        team_venue=team_venue,
+        league_table=league_table,
     )
+
+    for metric, value in comparison.items():
+        print(f"{metric:<40} {value}")
 
 if __name__ == "__main__":
     main()

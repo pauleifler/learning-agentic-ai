@@ -30,7 +30,12 @@ def load_data(file_path: Path) -> pd.DataFrame:
         .reset_index(drop=True)
     )
     return data
-
+   
+POINTS_BY_RESULT = {
+    "Win": 3,
+    "Draw": 1,
+    "Loss": 0,
+    }
 
 def get_team_matches(data: pd.DataFrame, team: str, current_round: int) -> pd.DataFrame:
     team_matches = data[
@@ -50,12 +55,7 @@ def get_team_matches(data: pd.DataFrame, team: str, current_round: int) -> pd.Da
     team_matches["result"] = team_matches.apply(
         lambda row: "Win" if row["goals_for"] > row["goals_against"] else ("Draw" if row["goals_for"] == row["goals_against"] else "Loss"), axis=1
     )
-    POINTS = {
-    "Win": 3,
-    "Draw": 1,
-    "Loss": 0,
-    }
-    team_matches["points"] = team_matches["result"].map(POINTS)
+    team_matches["points"] = team_matches["result"].map(POINTS_BY_RESULT)
     return (
         team_matches
         .sort_values("date")
@@ -75,6 +75,8 @@ def calculate_match_metrics(matches: pd.DataFrame) -> dict:
             "wins": 0,
             "draws": 0,
             "losses": 0,
+            "goals_for": 0,
+            "goals_against": 0,
             "goals_scored_per_game": 0.0,
             "goals_conceded_per_game": 0.0,
             "goal_difference_per_game": 0.0,
@@ -88,6 +90,8 @@ def calculate_match_metrics(matches: pd.DataFrame) -> dict:
     wins = int(matches["result"].eq("Win").sum())
     draws = int(matches["result"].eq("Draw").sum())
     losses = int(matches["result"].eq("Loss").sum())
+    goals_for = int(matches["goals_for"].sum())
+    goals_against = int(matches["goals_against"].sum())
 
     goals_scored_per_game = (
         matches["goals_for"].sum() / games_played
@@ -109,6 +113,8 @@ def calculate_match_metrics(matches: pd.DataFrame) -> dict:
         "wins": wins,
         "draws": draws,
         "losses": losses,
+        "goals_for": goals_for,
+        "goals_against": goals_against,
         "goals_scored_per_game": float(goals_scored_per_game),
         "goals_conceded_per_game": float(
             goals_conceded_per_game
@@ -162,7 +168,11 @@ def build_team_profile(team_matches: pd.DataFrame) -> dict:
     }
 
 
-def display_team_profile(team: str,current_round: int,profile: dict,) -> None:
+def display_team_profile(
+        team: str,
+        current_round: int,
+        profile: dict,
+        ) -> None:
     """Display the team profile in a readable format."""
 
     print(f"\n===== {team} Profile (Round {current_round}) =====\n")
@@ -176,6 +186,84 @@ def display_team_profile(team: str,current_round: int,profile: dict,) -> None:
                 print(f"{metric:<35} {value}")
         else:
             print(values)
+
+
+def calculate_league_table(
+    data: pd.DataFrame,
+    league: str,
+    current_round: int,
+) -> pd.DataFrame:
+    """Calculate the league table up to a specified round."""
+    
+    league_matches = data[
+        (data["league"] == league)
+        & (data["round_number"] <= current_round)
+    ].copy()
+
+    if league_matches.empty:
+        raise ValueError(
+            f"No matches found for {league} through round {current_round}."
+        )
+
+    teams = sorted(
+        pd.concat(
+            [
+                league_matches["home_team"],
+                league_matches["away_team"],
+            ]
+        ).unique()
+    )
+
+    league_table = []
+
+    for team in teams:
+        team_matches = get_team_matches(
+            data,
+            team,
+            current_round,
+        )
+        
+        profile = build_team_profile(team_matches)
+
+        league_table.append(
+            {
+                "team": team,
+                "wins": profile["season"]["wins"],
+                "draws": profile["season"]["draws"],
+                "losses": profile["season"]["losses"],
+                "goals_for": profile["season"]["goals_for"],
+                "goals_against": profile["season"]["goals_against"],
+                "goal_difference": profile["season"]["goals_for"] - profile["season"]["goals_against"],
+                "points": profile["season"]["points"],  
+            }
+        )
+        league_table_df = pd.DataFrame(league_table)
+
+        league_table_df = (
+            league_table_df
+            .sort_values(
+                by=[
+                    "points",
+                    "goal_difference",
+                    "goals_for",
+                ],
+                ascending=[
+                    False,
+                    False,
+                    False,
+                ],
+            )
+            .reset_index(drop=True)
+        )
+
+        league_table_df.insert(
+        0,
+        "position",
+        range(1, len(league_table_df) + 1),
+        )
+
+    return league_table_df
+
 
 
 def main() -> None:
@@ -197,6 +285,14 @@ def main() -> None:
         current_round,
         profile,
     )
+
+    league_table = calculate_league_table(
+        data=data,
+        league="Championship",
+        current_round=25,
+    )
+
+    print(league_table.to_string(index=False))
 
 if __name__ == "__main__":
     main()

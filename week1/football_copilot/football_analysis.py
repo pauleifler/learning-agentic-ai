@@ -488,7 +488,7 @@ def compare_teams(team: str,
     }
 
 
-def analyse_fixture_difficulty(
+def analyse_fixture_context(
     team_matches: pd.DataFrame,
     league_table: pd.DataFrame,
     match_count: int = 6,
@@ -857,14 +857,203 @@ def gather_match_context(
         "league_table": league_table,
     }
 
+
+def analyse_league_rankings(
+    data: pd.DataFrame,
+    league_table: pd.DataFrame,
+    team: str,
+    current_round: int,
+) -> dict:
+    """Rank a team against the league for selected performance metrics."""
+
+    rankings = []
+
+    for league_team in league_table["team"]:
+        team_matches = get_team_matches(
+            data=data,
+            team=league_team,
+            current_round=current_round,
+        )
+
+        profile = build_team_profile(team_matches)
+
+        rankings.append(
+            {
+                "team": league_team,
+                "season_ppg": profile["season"]["ppg"],
+                "goals_scored_per_game": (
+                    profile["season"]["goals_scored_per_game"]
+                ),
+                "goals_conceded_per_game": (
+                    profile["season"]["goals_conceded_per_game"]
+                ),
+                "home_ppg": profile["home"]["ppg"],
+                "away_ppg": profile["away"]["ppg"],
+            }
+        )
+
+    rankings_df = pd.DataFrame(rankings)
+
+    if team not in rankings_df["team"].values:
+        raise ValueError(
+            f"Team '{team}' was not found in the rankings data."
+        )
+
+    rankings_df["ppg_rank"] = (
+        rankings_df["season_ppg"]
+        .rank(method="min", ascending=False)
+        .astype(int)
+    )
+
+    rankings_df["attack_rank"] = (
+        rankings_df["goals_scored_per_game"]
+        .rank(method="min", ascending=False)
+        .astype(int)
+    )
+
+    rankings_df["defence_rank"] = (
+        rankings_df["goals_conceded_per_game"]
+        .rank(method="min", ascending=True)
+        .astype(int)
+    )
+
+    rankings_df["home_rank"] = (
+        rankings_df["home_ppg"]
+        .rank(method="min", ascending=False)
+        .astype(int)
+    )
+
+    rankings_df["away_rank"] = (
+        rankings_df["away_ppg"]
+        .rank(method="min", ascending=False)
+        .astype(int)
+    )
+
+    team_row = rankings_df[
+        rankings_df["team"] == team
+    ].iloc[0]
+
+    return {
+        "team": team,
+        "league_size": len(rankings_df),
+        "ppg_rank": int(team_row["ppg_rank"]),
+        "attack_rank": int(team_row["attack_rank"]),
+        "defence_rank": int(team_row["defence_rank"]),
+        "home_rank": int(team_row["home_rank"]),
+        "away_rank": int(team_row["away_rank"]),
+    }
+
+
+def identify_key_insights(
+    comparison: dict,
+    fixture_context: dict,
+    rankings: dict,
+) -> list[str]:
+    """Generate deterministic insights from comparison and context data."""
+
+    insights = []
+
+    team = comparison["team"]
+    opponent = comparison["opponent"]
+
+    recent_ppg_difference = (
+        comparison["team_recent_ppg"]
+        - comparison["opponent_recent_ppg"]
+    )
+
+    venue_ppg_difference = (
+        comparison["team_venue_ppg"]
+        - comparison["opponent_venue_ppg"]
+    )
+
+    if recent_ppg_difference >= 0.5:
+        insights.append(
+            f"{team} are in clearly stronger recent form than "
+            f"{opponent}, based on points per game."
+        )
+    elif recent_ppg_difference <= -0.5:
+        insights.append(
+            f"{opponent} are in clearly stronger recent form than "
+            f"{team}, based on points per game."
+        )
+    else:
+        insights.append(
+            f"Recent form is broadly similar between {team} and "
+            f"{opponent}."
+        )
+
+    if venue_ppg_difference >= 0.5:
+        insights.append(
+            f"{team} have the stronger venue-specific record for "
+            "this fixture."
+        )
+    elif venue_ppg_difference <= -0.5:
+        insights.append(
+            f"{opponent} have the stronger venue-specific record "
+            "for this fixture."
+        )
+    else:
+        insights.append(
+            "The teams have similar venue-specific records."
+        )
+
+    if comparison["team_position"] < comparison["opponent_position"]:
+        insights.append(
+            f"{team} currently hold the higher league position."
+        )
+    elif comparison["team_position"] > comparison["opponent_position"]:
+        insights.append(
+            f"{opponent} currently hold the higher league position."
+        )
+
+    if fixture_context["schedule_profile"] == "mostly strong opposition":
+        insights.append(
+            f"{team}'s recent form has come against mostly strong "
+            "opposition."
+        )
+    elif fixture_context["schedule_profile"] == "mostly weak opposition":
+        insights.append(
+            f"{team}'s recent form has come against mostly weaker "
+            "opposition."
+        )
+
+    if fixture_context["venue_balance"] == "away-heavy":
+        insights.append(
+            f"{team}'s recent fixture run has been away-heavy."
+        )
+    elif fixture_context["venue_balance"] == "home-heavy":
+        insights.append(
+            f"{team}'s recent fixture run has been home-heavy."
+        )
+
+    if rankings["attack_rank"] <= 8:
+        insights.append(
+            f"{team} rank among the league's strongest attacking sides."
+        )
+    elif rankings["attack_rank"] >= 16:
+        insights.append(
+            f"{team} rank among the league's weaker attacking sides."
+        )
+
+    if rankings["defence_rank"] <= 8:
+        insights.append(
+            f"{team} rank among the league's strongest defensive sides."
+        )
+    elif rankings["defence_rank"] > 16:
+        insights.append(
+            f"{team} rank among the league's weaker defensive sides."
+        )
+
+    return insights
+
+
 def main() -> None:
     data = load_data(DATA_FILE)
 
     team = "QPR"
-    league = "Championship"
     current_round = 25
 
-    team_matches = get_team_matches(
+    fixture = get_next_fixture(
         data=data,
         team=team,
         current_round=current_round,
@@ -872,40 +1061,79 @@ def main() -> None:
 
     league_table = calculate_league_table(
         data=data,
-        league=league,
+        league=fixture["league"],
         current_round=current_round,
     )
 
-    fixture_difficulty = (
-        analyse_fixture_difficulty(
-            team_matches=team_matches,
-            league_table=league_table,
-            match_count=6,
-        )
+    comparison = compare_teams(
+        team=team,
+        opponent=fixture["opponent"],
+        team_venue=fixture["venue"],
+        current_round=current_round,
+        data=data,
+        league_table=league_table,
     )
 
-    print(
-        f"\n===== {team} Recent Fixture "
-        f"Difficulty =====\n"
+    team_matches = get_team_matches(
+        data=data,
+        team=team,
+        current_round=current_round,
     )
 
-    for key, value in (
-        fixture_difficulty.items()
-    ):
+    fixture_context = analyse_fixture_context(
+        team_matches=team_matches,
+        league_table=league_table,
+        match_count=6,
+    )
+
+    rankings = analyse_league_rankings(
+        data=data,
+        league_table=league_table,
+        team=team,
+        current_round=current_round,
+    )
+
+    insights = identify_key_insights(
+        comparison=comparison,
+        fixture_context=fixture_context,
+        rankings=rankings,
+    )
+
+    print("\n===== NEXT FIXTURE =====\n")
+
+    for key, value in fixture.items():
+        print(f"{key:<30} {value}")
+
+    print("\n===== TEAM COMPARISON =====\n")
+
+    for key, value in comparison.items():
+        print(f"{key:<40} {value}")
+
+    print("\n===== FIXTURE CONTEXT =====\n")
+
+    for key, value in fixture_context.items():
         if key == "recent_opponents":
             print("\nRecent opponents:")
 
             for opponent in value:
                 print(
                     f"- {opponent['opponent']}: "
-                    f"position "
-                    f"{opponent['position']}, "
+                    f"position {opponent['position']}, "
                     f"PPG {opponent['ppg']}, "
                     f"{opponent['venue']}"
                 )
-
         else:
             print(f"{key:<35} {value}")
+
+    print("\n===== LEAGUE RANKINGS =====\n")
+
+    for key, value in rankings.items():
+        print(f"{key:<25} {value}")
+
+    print("\n===== KEY INSIGHTS =====\n")
+
+    for insight in insights:
+        print(f"- {insight}")
 
 
 if __name__ == "__main__":

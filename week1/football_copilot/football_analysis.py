@@ -275,6 +275,46 @@ def get_team_position(league_table: pd.DataFrame, team: str) -> int:
     return int(matching_rows.iloc[0]["position"])
 
 
+def get_next_fixture(data: pd.DataFrame, team: str, current_round: int) -> dict:
+    future_matches = data[
+        (
+            (data["home_team"] == team)
+            | (data["away_team"] == team)
+        )
+        & (data["round_number"] > current_round)
+    ].copy()
+
+    if future_matches.empty:
+        raise ValueError(
+            f"No fixture found for {team} after round {current_round}."
+        )
+    
+    next_fixture = (
+        future_matches
+        .sort_values(["round_number", "date"])
+        .iloc[0]
+    )
+
+    is_home = next_fixture["home_team"] == team
+
+    opponent = (
+        next_fixture["away_team"]
+        if is_home
+        else next_fixture["home_team"]
+    )
+
+    venue = "home" if is_home else "away"
+
+    return {
+        "round_number": int(next_fixture["round_number"]),
+        "date": next_fixture["date"].strftime("%Y-%m-%d"),
+        "league": next_fixture["league"],
+        "team": team,
+        "opponent": opponent,
+        "venue": venue,
+    }
+
+
 def compare_teams(team: str,
                   opponent: str,
                   league_table: pd.DataFrame,
@@ -368,47 +408,20 @@ def compare_teams(team: str,
 
 
 def main() -> None:
+    
     data = load_data(DATA_FILE)
-
-    league = "Championship"
     team = "QPR"
-    opponent = "Bristol City"
     current_round = 25
-    team_venue = "home"
-
-    team_matches = get_team_matches(
-        data,
-        team,
-        current_round,
-    )
-
-    profile = build_team_profile(team_matches)
-
-    display_team_profile(
-        team,
-        current_round,
-        profile,
-    )
-
-    league_table = calculate_league_table(
+    fixture = get_next_fixture(
         data=data,
-        league="Championship",
-        current_round=25,
-    )
-
-    position = get_team_position(league_table, team)
-
-    comparison = compare_teams(
         team=team,
-        opponent=opponent,
         current_round=current_round,
-        data=data,
-        team_venue=team_venue,
-        league_table=league_table,
     )
+    
+    print("\nNext fixture:\n")
 
-    for metric, value in comparison.items():
-        print(f"{metric:<40} {value}")
+    for key, value in fixture.items():
+        print(f"{key:<20} {value}")
 
 if __name__ == "__main__":
     main()

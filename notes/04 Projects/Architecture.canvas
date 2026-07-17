@@ -1,0 +1,17 @@
+{
+	"nodes":[
+		{"id":"362be2a70f6744d7","x":-160,"y":-340,"width":250,"height":60,"type":"text","text":"CSV"},
+		{"id":"bf94fefd5a0e9cae","x":-160,"y":-240,"width":250,"height":60,"type":"text","text":"Pandas reads data"},
+		{"id":"74b08153af50d8c9","type":"text","text":"Build a natural language summary","x":-160,"y":-140,"width":250,"height":60},
+		{"id":"17d8a531c094bbf7","type":"text","text":"Open AI Request","x":-160,"y":-20,"width":250,"height":60},
+		{"id":"de3be76a1f48a6c2","type":"text","text":"GPT analyses data","x":-160,"y":120,"width":250,"height":60},
+		{"id":"726a949628001704","type":"text","text":"Markdown report generated","x":-160,"y":260,"width":250,"height":60}
+	],
+	"edges":[
+		{"id":"5263e68fbc66f60a","fromNode":"362be2a70f6744d7","fromSide":"bottom","toNode":"bf94fefd5a0e9cae","toSide":"top"},
+		{"id":"cc7eca64eb3a3ce6","fromNode":"bf94fefd5a0e9cae","fromSide":"bottom","toNode":"74b08153af50d8c9","toSide":"top"},
+		{"id":"d2c8a5813b4d104a","fromNode":"74b08153af50d8c9","fromSide":"bottom","toNode":"17d8a531c094bbf7","toSide":"top"},
+		{"id":"2b883fa98b2b8dce","fromNode":"17d8a531c094bbf7","fromSide":"bottom","toNode":"de3be76a1f48a6c2","toSide":"top"},
+		{"id":"0a3351b79b32dc07","fromNode":"de3be76a1f48a6c2","fromSide":"bottom","toNode":"726a949628001704","toSide":"top"}
+	]
+}

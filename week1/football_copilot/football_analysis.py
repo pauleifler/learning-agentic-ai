@@ -5,6 +5,8 @@ import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
 from openai import OpenAI
+from pprint import pprint
+import json
 
 load_dotenv()
 
@@ -293,8 +295,6 @@ def calculate_league_table(
         ).unique()
     )
 
-    played = current_round-9
-
     league_table = []
 
     for team in teams:
@@ -309,7 +309,7 @@ def calculate_league_table(
         league_table.append(
             {
                 "team": team,
-                "played": played,
+                "played": profile["season"]["games_played"],
                 "wins": profile["season"]["wins"],
                 "draws": profile["season"]["draws"],
                 "losses": profile["season"]["losses"],
@@ -319,30 +319,30 @@ def calculate_league_table(
                 "points": profile["season"]["points"],  
             }
         )
-        league_table_df = pd.DataFrame(league_table)
+    league_table_df = pd.DataFrame(league_table)
 
-        league_table_df = (
-            league_table_df
-            .sort_values(
-                by=[
-                    "points",
-                    "goal_difference",
-                    "goals_for",
-                ],
-                ascending=[
-                    False,
-                    False,
-                    False,
-                ],
-            )
-            .reset_index(drop=True)
+    league_table_df = (
+        league_table_df
+        .sort_values(
+            by=[
+                "points",
+                "goal_difference",
+                "goals_for",
+            ],
+            ascending=[
+                False,
+                False,
+                False,
+            ],
         )
+        .reset_index(drop=True)
+    )
 
-        league_table_df.insert(
-        0,
-        "position",
-        range(1, len(league_table_df) + 1),
-        )
+    league_table_df.insert(
+    0,
+    "position",
+    range(1, len(league_table_df) + 1),
+    )
 
     return league_table_df
 
@@ -823,41 +823,6 @@ def analyse_fixture_context(
     }
 
 
-def gather_match_context(
-        data: pd.DataFrame,
-        team: str,
-        current_round: int,
-)  -> dict:
-    """Gather all data required for a pre-match report."""
-
-    fixture = get_next_fixture(
-        data=data,
-        team=team,
-        current_round=current_round,
-    )
-
-    league_table = calculate_league_table(
-        data=data,
-        league=fixture["league"],
-        current_round=current_round,
-    )
-
-    comparison = compare_teams(
-        team=team,
-        opponent=fixture["opponent"],
-        team_venue=fixture["venue"],
-        current_round=current_round,
-        data=data,
-        league_table=league_table,
-    )
-
-    return {
-        "fixture": fixture,
-        "comparison": comparison,
-        "league_table": league_table,
-    }
-
-
 def analyse_league_rankings(
     data: pd.DataFrame,
     league_table: pd.DataFrame,
@@ -943,13 +908,29 @@ def analyse_league_rankings(
         "away_rank": int(team_row["away_rank"]),
     }
 
+def classify_rank(rank: int, league_size: int) -> str:
+    """Classify a league ranking as strong, average or weak."""
+
+    strong_limit = max(1, round(league_size / 3))
+    weak_limit = round((league_size * 2) / 3)
+
+    if rank <= strong_limit:
+        return "strong"
+
+    if rank >= weak_limit:
+        return "weak"
+
+    return "average"
+
 
 def identify_key_insights(
     comparison: dict,
-    fixture_context: dict,
-    rankings: dict,
+    team_fixture_context: dict,
+    opponent_fixture_context: dict,
+    team_rankings: dict,
+    opponent_rankings: dict,
 ) -> list[str]:
-    """Generate deterministic insights from comparison and context data."""
+    """Generate balanced deterministic insights for both teams."""
 
     insights = []
 
@@ -966,6 +947,7 @@ def identify_key_insights(
         - comparison["opponent_venue_ppg"]
     )
 
+    # Recent form comparison
     if recent_ppg_difference >= 0.5:
         insights.append(
             f"{team} are in clearly stronger recent form than "
@@ -978,14 +960,15 @@ def identify_key_insights(
         )
     else:
         insights.append(
-            f"Recent form is broadly similar between {team} and "
-            f"{opponent}."
+            f"Recent form is broadly similar between "
+            f"{team} and {opponent}."
         )
 
+    # Venue-specific form comparison
     if venue_ppg_difference >= 0.5:
         insights.append(
-            f"{team} have the stronger venue-specific record for "
-            "this fixture."
+            f"{team} have the stronger venue-specific record "
+            "for this fixture."
         )
     elif venue_ppg_difference <= -0.5:
         insights.append(
@@ -997,6 +980,7 @@ def identify_key_insights(
             "The teams have similar venue-specific records."
         )
 
+    # League position comparison
     if comparison["team_position"] < comparison["opponent_position"]:
         insights.append(
             f"{team} currently hold the higher league position."
@@ -1005,53 +989,133 @@ def identify_key_insights(
         insights.append(
             f"{opponent} currently hold the higher league position."
         )
+    else:
+        insights.append(
+            f"{team} and {opponent} are level on league position."
+        )
 
-    if fixture_context["schedule_profile"] == "mostly strong opposition":
+    # Recent fixture difficulty
+    team_schedule_profile = team_fixture_context["schedule_profile"]
+    opponent_schedule_profile = (
+        opponent_fixture_context["schedule_profile"]
+    )
+
+    if team_schedule_profile == "mostly strong opposition":
         insights.append(
             f"{team}'s recent form has come against mostly strong "
             "opposition."
         )
-    elif fixture_context["schedule_profile"] == "mostly weak opposition":
+    elif team_schedule_profile == "mostly weak opposition":
         insights.append(
             f"{team}'s recent form has come against mostly weaker "
             "opposition."
         )
 
-    if fixture_context["venue_balance"] == "away-heavy":
+    if opponent_schedule_profile == "mostly strong opposition":
+        insights.append(
+            f"{opponent}'s recent form has come against mostly strong "
+            "opposition."
+        )
+    elif opponent_schedule_profile == "mostly weak opposition":
+        insights.append(
+            f"{opponent}'s recent form has come against mostly weaker "
+            "opposition."
+        )
+
+    # Recent venue balance
+    team_venue_balance = team_fixture_context["venue_balance"]
+    opponent_venue_balance = opponent_fixture_context["venue_balance"]
+
+    if team_venue_balance == "away-heavy":
         insights.append(
             f"{team}'s recent fixture run has been away-heavy."
         )
-    elif fixture_context["venue_balance"] == "home-heavy":
+    elif team_venue_balance == "home-heavy":
         insights.append(
             f"{team}'s recent fixture run has been home-heavy."
         )
 
-    if rankings["attack_rank"] <= 8:
+    if opponent_venue_balance == "away-heavy":
+        insights.append(
+            f"{opponent}'s recent fixture run has been away-heavy."
+        )
+    elif opponent_venue_balance == "home-heavy":
+        insights.append(
+            f"{opponent}'s recent fixture run has been home-heavy."
+        )
+
+    # Rank classifications
+    team_attack_level = classify_rank(
+        rank=team_rankings["attack_rank"],
+        league_size=team_rankings["league_size"],
+    )
+
+    opponent_attack_level = classify_rank(
+        rank=opponent_rankings["attack_rank"],
+        league_size=opponent_rankings["league_size"],
+    )
+
+    team_defence_level = classify_rank(
+        rank=team_rankings["defence_rank"],
+        league_size=team_rankings["league_size"],
+    )
+
+    opponent_defence_level = classify_rank(
+        rank=opponent_rankings["defence_rank"],
+        league_size=opponent_rankings["league_size"],
+    )
+
+    # Team attack
+    if team_attack_level == "strong":
         insights.append(
             f"{team} rank among the league's strongest attacking sides."
         )
-    elif rankings["attack_rank"] >= 16:
+    elif team_attack_level == "weak":
         insights.append(
             f"{team} rank among the league's weaker attacking sides."
         )
 
-    if rankings["defence_rank"] <= 8:
+    # Opponent attack
+    if opponent_attack_level == "strong":
+        insights.append(
+            f"{opponent} rank among the league's strongest attacking "
+            "sides."
+        )
+    elif opponent_attack_level == "weak":
+        insights.append(
+            f"{opponent} rank among the league's weaker attacking sides."
+        )
+
+    # Team defence
+    if team_defence_level == "strong":
         insights.append(
             f"{team} rank among the league's strongest defensive sides."
         )
-    elif rankings["defence_rank"] > 16:
+    elif team_defence_level == "weak":
         insights.append(
             f"{team} rank among the league's weaker defensive sides."
+        )
+
+    # Opponent defence
+    if opponent_defence_level == "strong":
+        insights.append(
+            f"{opponent} rank among the league's strongest defensive "
+            "sides."
+        )
+    elif opponent_defence_level == "weak":
+        insights.append(
+            f"{opponent} rank among the league's weaker defensive sides."
         )
 
     return insights
 
 
-def main() -> None:
-    data = load_data(DATA_FILE)
-
-    team = "QPR"
-    current_round = 25
+def gather_match_context(
+        data: pd.DataFrame,
+        team: str,
+        current_round: int,
+)  -> dict:
+    """Gather all data required for a pre-match report."""
 
     fixture = get_next_fixture(
         data=data,
@@ -1080,62 +1144,139 @@ def main() -> None:
         current_round=current_round,
     )
 
-    fixture_context = analyse_fixture_context(
+    team_fixture_context = analyse_fixture_context(
         team_matches=team_matches,
         league_table=league_table,
         match_count=6,
     )
 
-    rankings = analyse_league_rankings(
+    opponent_matches = get_team_matches(
+        data=data,
+        team=fixture["opponent"],
+        current_round=current_round,
+    )
+
+    opponent_fixture_context = analyse_fixture_context(
+        team_matches=opponent_matches,
+        league_table=league_table,
+        match_count=6,
+    )
+
+    team_league_rankings = analyse_league_rankings(
         data=data,
         league_table=league_table,
+        current_round=current_round,
+        team=team,
+    )
+
+    opponent_league_rankings = analyse_league_rankings(
+        data=data,
+        league_table=league_table,
+        current_round=current_round,
+        team=fixture["opponent"],
+    )
+
+    key_insights = identify_key_insights(
+        comparison=comparison,
+        team_fixture_context=team_fixture_context,
+        opponent_fixture_context=opponent_fixture_context,
+        team_rankings=team_league_rankings,
+        opponent_rankings=opponent_league_rankings,
+    )
+
+    return {
+        "fixture": fixture,
+        "comparison": comparison,
+        "fixture_context": {
+            "team": team_fixture_context,
+            "opponent": opponent_fixture_context,
+        },
+        "league_rankings": {
+            "team": team_league_rankings,
+            "opponent": opponent_league_rankings,
+        },
+        "key_insights": key_insights,
+    }
+
+
+def generate_match_report(context: dict) -> str:
+    """Generate a grounded pre-match report from analytical context."""
+
+    context_json = json.dumps(
+        context,
+        indent=2,
+    )
+
+    instructions = """
+You are a football analytics writer.
+
+Write a concise, evidence-based pre-match report using only the supplied
+match context.
+
+Rules:
+- Do not invent statistics, events, injuries, players or tactical details.
+- Do not use outside knowledge.
+- Treat the supplied statistics as the source of truth.
+- Distinguish factual observations from interpretation.
+- Do not predict an exact score.
+- Do not claim that a team will definitely win.
+- Use plain, professional language.
+- Mention both teams.
+- Focus on the most meaningful evidence rather than repeating every metric.
+- Predict the score of the fixture
+
+Structure the report under these headings:
+
+Fixture Overview
+Form and League Position
+Home and Away Context
+Strengths and Weaknesses
+Key Match Takeaway
+Score Prediction
+""".strip()
+
+    response = client.responses.create(
+        model="gpt-5.6",
+        reasoning={"effort": "low"},
+        instructions=instructions,
+        input=(
+            "Create a pre-match report from the following JSON context:\n\n"
+            f"{context_json}"
+        ),
+    )
+
+    report = response.output_text
+
+    if not report:
+        raise ValueError(
+            "The model returned an empty match report."
+        )
+
+    return report
+
+
+def main() -> None:
+    data = load_data(DATA_FILE)
+
+    team = "QPR"
+    current_round = 25
+
+    context = gather_match_context(
+        data=data,
         team=team,
         current_round=current_round,
     )
 
-    insights = identify_key_insights(
-        comparison=comparison,
-        fixture_context=fixture_context,
-        rankings=rankings,
-    )
+    print("\n===== DETERMINISTIC KEY INSIGHTS =====\n")
 
-    print("\n===== NEXT FIXTURE =====\n")
-
-    for key, value in fixture.items():
-        print(f"{key:<30} {value}")
-
-    print("\n===== TEAM COMPARISON =====\n")
-
-    for key, value in comparison.items():
-        print(f"{key:<40} {value}")
-
-    print("\n===== FIXTURE CONTEXT =====\n")
-
-    for key, value in fixture_context.items():
-        if key == "recent_opponents":
-            print("\nRecent opponents:")
-
-            for opponent in value:
-                print(
-                    f"- {opponent['opponent']}: "
-                    f"position {opponent['position']}, "
-                    f"PPG {opponent['ppg']}, "
-                    f"{opponent['venue']}"
-                )
-        else:
-            print(f"{key:<35} {value}")
-
-    print("\n===== LEAGUE RANKINGS =====\n")
-
-    for key, value in rankings.items():
-        print(f"{key:<25} {value}")
-
-    print("\n===== KEY INSIGHTS =====\n")
-
-    for insight in insights:
+    for insight in context["key_insights"]:
         print(f"- {insight}")
 
+    print("\n===== AI PRE-MATCH REPORT =====\n")
+
+    report = generate_match_report(context)
+
+    print(report)
 
 if __name__ == "__main__":
     main()
-

@@ -1110,6 +1110,31 @@ def identify_key_insights(
     return insights
 
 
+def assess_data_quality(
+    team_matches: pd.DataFrame,
+) -> dict:
+    """Assess whether enough historical data exists."""
+
+    matches_played = len(team_matches)
+
+    warnings = []
+
+    if matches_played < 6:
+        warnings.append(
+            "Recent form is based on fewer than six matches."
+        )
+
+    if matches_played < 10:
+        warnings.append(
+            "Season statistics are based on a limited sample."
+        )
+
+    return {
+        "matches_played": matches_played,
+        "warnings": warnings,
+    }
+
+
 def gather_match_context(
         data: pd.DataFrame,
         team: str,
@@ -1184,6 +1209,10 @@ def gather_match_context(
         opponent_rankings=opponent_league_rankings,
     )
 
+    data_quality = assess_data_quality(
+        team_matches=team_matches,
+    )
+
     return {
         "fixture": fixture,
         "comparison": comparison,
@@ -1196,6 +1225,7 @@ def gather_match_context(
             "opponent": opponent_league_rankings,
         },
         "key_insights": key_insights,
+        "data_quality": data_quality,
     }
 
 
@@ -1224,6 +1254,7 @@ Rules:
 - Mention both teams.
 - Focus on the most meaningful evidence rather than repeating every metric.
 - Predict the score of the fixture
+- If data_quality.warnings is not empty, mention the limitations early in the report
 
 Structure the report under these headings:
 
@@ -1258,8 +1289,8 @@ Score Prediction
 def main() -> None:
     data = load_data(DATA_FILE)
 
-    team = "QPR"
-    current_round = 25
+    team = "Liverpool"
+    current_round = 12
 
     context = gather_match_context(
         data=data,

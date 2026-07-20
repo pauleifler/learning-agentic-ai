@@ -15,114 +15,6 @@ LEAGUE_NAMES = {
     "E3": "League Two",
 }
 
-COLUMN_MAP = {
-    "Div": "league_code",
-    "Date": "date",
-    "Time": "kickoff_time",
-    "HomeTeam": "home_team",
-    "AwayTeam": "away_team",
-
-    "FTHG": "home_goals",
-    "FTAG": "away_goals",
-    "FTR": "full_time_result",
-
-    "HTHG": "home_half_time_goals",
-    "HTAG": "away_half_time_goals",
-    "HTR": "half_time_result",
-
-    "HS": "home_shots",
-    "AS": "away_shots",
-    "HST": "home_shots_on_target",
-    "AST": "away_shots_on_target",
-
-    "HC": "home_corners",
-    "AC": "away_corners",
-
-    "HY": "home_yellow_cards",
-    "AY": "away_yellow_cards",
-    "HR": "home_red_cards",
-    "AR": "away_red_cards",
-}
-
-def load_match_data(data_directory: Path) -> pd.DataFrame:
-    """
-    Load and standardise English league match data.
-
-    Reads any available E0-E3 CSV files from the supplied directory,
-    retains the required columns, standardises column names and returns
-    one combined DataFrame.
-    """
-
-    csv_files = sorted(data_directory.glob("E[0-3].csv"))
-
-    if not csv_files:
-        raise FileNotFoundError(
-            f"No E0-E3 CSV files were found in: {data_directory}"
-        )
-
-    required_source_columns = list(COLUMN_MAP.keys())
-    frames = []
-
-    for file_path in csv_files:
-        frame = pd.read_csv(file_path)
-
-        missing_columns = [
-            column
-            for column in required_source_columns
-            if column not in frame.columns
-        ]
-
-        if missing_columns:
-            raise ValueError(
-                f"{file_path.name} is missing required columns: "
-                f"{missing_columns}"
-            )
-
-        frame = frame[required_source_columns].copy()
-        frame = frame.rename(columns=COLUMN_MAP)
-
-        frames.append(frame)
-
-    data = pd.concat(
-        frames,
-        ignore_index=True,
-    )
-
-    data["date"] = pd.to_datetime(
-        data["date"],
-        format="%d/%m/%Y",
-        errors="raise",
-    )
-
-    data["league"] = data["league_code"].map(LEAGUE_NAMES)
-
-    if data["league"].isna().any():
-        unknown_codes = (
-            data.loc[data["league"].isna(), "league_code"]
-            .dropna()
-            .unique()
-            .tolist()
-        )
-
-        raise ValueError(
-            f"Unknown league codes found: {unknown_codes}"
-        )
-
-    data = (
-        data.sort_values(
-            by=["date", "kickoff_time"],
-            na_position="last",
-        )
-        .reset_index(drop=True)
-    )
-
-    return data
-
-DATA_DIRECTORY = Path(__file__).resolve().parent / "data"
-
-data = load_match_data(DATA_DIRECTORY)
-
-
 def normalise_analysis_date(
     analysis_date: str | pd.Timestamp,
 ) -> pd.Timestamp:
@@ -788,14 +680,13 @@ def build_team_context(
 
 
 def compare_teams(
-    home_context: dict,
-    away_context: dict,
+    team_context: dict,
+    opponent_context: dict,
+    venue: str,
 ) -> dict:
     """
-    Compare two team-context dictionaries for a fixture.
-
-    The home team is evaluated using its home profile.
-    The away team is evaluated using its away profile.
+    Compare a team against their opponent
+    from the perspective of the selected team.
     """
 
     required_context_keys = {
@@ -806,8 +697,8 @@ def compare_teams(
     }
 
     for label, context in [
-        ("home_context", home_context),
-        ("away_context", away_context),
+        ("team_context", team_context),
+        ("opponent_context", opponent_context),
     ]:
         missing_keys = required_context_keys.difference(
             context.keys()
@@ -819,129 +710,110 @@ def compare_teams(
                 f"{sorted(missing_keys)}"
             )
 
-    home_team = home_context["team"]
-    away_team = away_context["team"]
+    team = team_context["team"]
+    opponent = opponent_context["team"]
 
-    home_season = home_context["profile"]["season"]
-    away_season = away_context["profile"]["season"]
+    team_season = team_context["profile"]["season"]
+    opponent_season = opponent_context["profile"]["season"]
 
-    home_recent = home_context["profile"]["recent"]
-    away_recent = away_context["profile"]["recent"]
+    team_recent = team_context["profile"]["recent"]
+    opponent_recent = opponent_context["profile"]["recent"]
 
-    home_venue = home_context["profile"]["home"]
-    away_venue = away_context["profile"]["away"]
+    # Select the relevant venue perspective
+    if venue == "Home":
+        team_venue = team_context["profile"]["home"]
+        opponent_venue = opponent_context["profile"]["away"]
 
-    home_league = home_context["league"]
-    away_league = away_context["league"]
+    elif venue == "Away":
+        team_venue = team_context["profile"]["away"]
+        opponent_venue = opponent_context["profile"]["home"]
 
-    home_ranks = home_context["ranks"]
-    away_ranks = away_context["ranks"]
+    else:
+        raise ValueError(
+            "venue must be either 'Home' or 'Away'"
+        )
+
+    team_league = team_context["league"]
+    opponent_league = opponent_context["league"]
+
+    team_ranks = team_context["ranks"]
+    opponent_ranks = opponent_context["ranks"]
 
     return {
         "fixture": {
-            "home_team": home_team,
-            "away_team": away_team,
-            "analysis_date": home_context.get(
+            "team": team,
+            "opponent": opponent,
+            "venue": venue,
+            "analysis_date": team_context.get(
                 "analysis_date"
             ),
         },
 
-        "home_team": {
-            "team": home_team,
-            "league": home_league,
-            "season": home_season,
-            "recent": home_recent,
-            "venue": home_venue,
-            "ranks": home_ranks,
+        "team": {
+            "name": team,
+            "league": team_league,
+            "season": team_season,
+            "recent": team_recent,
+            "venue": team_venue,
+            "ranks": team_ranks,
         },
 
-        "away_team": {
-            "team": away_team,
-            "league": away_league,
-            "season": away_season,
-            "recent": away_recent,
-            "venue": away_venue,
-            "ranks": away_ranks,
+        "opponent": {
+            "name": opponent,
+            "league": opponent_league,
+            "season": opponent_season,
+            "recent": opponent_recent,
+            "venue": opponent_venue,
+            "ranks": opponent_ranks,
         },
 
         "differences": {
-            "league_position": (
-                away_league["position"]
-                - home_league["position"]
-            ),
-
-            "points": (
-                home_league["points"]
-                - away_league["points"]
-            ),
-
-            "season_ppg": round(
-                home_season["ppg"]
-                - away_season["ppg"],
+            metric: round(
+                team_value - opponent_value,
                 2,
-            ),
-
-            "recent_ppg": round(
-                home_recent["ppg"]
-                - away_recent["ppg"],
-                2,
-            ),
-
-            "venue_ppg": round(
-                home_venue["ppg"]
-                - away_venue["ppg"],
-                2,
-            ),
-
-            "goals_scored_per_game": round(
-                home_venue["goals_scored_per_game"]
-                - away_venue["goals_scored_per_game"],
-                2,
-            ),
-
-            "goals_conceded_per_game": round(
-                home_venue["goals_conceded_per_game"]
-                - away_venue[
-                    "goals_conceded_per_game"
-                ],
-                2,
-            ),
-
-            "shots_per_game": round(
-                home_venue["shots_per_game"]
-                - away_venue["shots_per_game"],
-                2,
-            ),
-
-            "shots_on_target_per_game": round(
-                home_venue[
-                    "shots_on_target_per_game"
-                ]
-                - away_venue[
-                    "shots_on_target_per_game"
-                ],
-                2,
-            ),
-
-            "corners_per_game": round(
-                home_venue["corners_per_game"]
-                - away_venue["corners_per_game"],
-                2,
-            ),
-
-            "yellow_cards_per_game": round(
-                home_venue["yellow_cards_per_game"]
-                - away_venue[
-                    "yellow_cards_per_game"
-                ],
-                2,
-            ),
-
-            "red_cards_per_game": round(
-                home_venue["red_cards_per_game"]
-                - away_venue["red_cards_per_game"],
-                2,
-            ),
+            )
+            for metric, team_value, opponent_value in [
+                (
+                    "season_ppg",
+                    team_season["ppg"],
+                    opponent_season["ppg"],
+                ),
+                (
+                    "recent_ppg",
+                    team_recent["ppg"],
+                    opponent_recent["ppg"],
+                ),
+                (
+                    "venue_ppg",
+                    team_venue["ppg"],
+                    opponent_venue["ppg"],
+                ),
+                (
+                    "goals_scored_per_game",
+                    team_venue["goals_scored_per_game"],
+                    opponent_venue["goals_scored_per_game"],
+                ),
+                (
+                    "goals_conceded_per_game",
+                    opponent_venue["goals_conceded_per_game"],
+                    team_venue["goals_conceded_per_game"],
+                ),
+                (
+                    "shots_per_game",
+                    team_venue["shots_per_game"],
+                    opponent_venue["shots_per_game"],
+                ),
+                (
+                    "shots_on_target_per_game",
+                    team_venue["shots_on_target_per_game"],
+                    opponent_venue["shots_on_target_per_game"],
+                ),
+                (
+                    "corners_per_game",
+                    team_venue["corners_per_game"],
+                    opponent_venue["corners_per_game"],
+                ),
+            ]
         },
     }
 
@@ -953,7 +825,8 @@ def build_fixture_comparison(
     analysis_date: str | pd.Timestamp,
 ) -> dict:
     """
-    Build a complete comparison for a team's next fixture.
+    Build a complete comparison for a team's next fixture
+    from the selected team's perspective.
     """
 
     analysis_date = normalise_analysis_date(
@@ -989,6 +862,22 @@ def build_fixture_comparison(
     home_team = next_fixture["home_team"]
     away_team = next_fixture["away_team"]
 
+    if team == home_team:
+        team_name = home_team
+        opponent_name = away_team
+        venue = "Home"
+
+    elif team == away_team:
+        team_name = away_team
+        opponent_name = home_team
+        venue = "Away"
+
+    else:
+        raise ValueError(
+            f"Selected team '{team}' was not found "
+            "in the upcoming fixture."
+        )
+
     league_table = calculate_league_table(
         data=data,
         league=league,
@@ -1005,30 +894,24 @@ def build_fixture_comparison(
         team_profiles=team_profiles,
     )
 
-    if home_team not in team_profiles:
-        raise ValueError(
-            f"Profile was not found for home team "
-            f"'{home_team}'."
-        )
+    for club in [team_name, opponent_name]:
+        if club not in team_profiles:
+            raise ValueError(
+                f"Profile was not found for '{club}'."
+            )
 
-    if away_team not in team_profiles:
-        raise ValueError(
-            f"Profile was not found for away team "
-            f"'{away_team}'."
-        )
-
-    home_context = build_team_context(
-        team=home_team,
-        team_profile=team_profiles[home_team],
+    team_context = build_team_context(
+        team=team_name,
+        team_profile=team_profiles[team_name],
         league_table=league_table,
         league_rankings=league_rankings,
         next_fixture=next_fixture,
         analysis_date=analysis_date,
     )
 
-    away_context = build_team_context(
-        team=away_team,
-        team_profile=team_profiles[away_team],
+    opponent_context = build_team_context(
+        team=opponent_name,
+        team_profile=team_profiles[opponent_name],
         league_table=league_table,
         league_rankings=league_rankings,
         next_fixture=next_fixture,
@@ -1036,15 +919,21 @@ def build_fixture_comparison(
     )
 
     comparison = compare_teams(
-        home_context=home_context,
-        away_context=away_context,
+        team_context=team_context,
+        opponent_context=opponent_context,
+        venue=venue,
     )
 
     return {
-        "fixture": next_fixture,
+        "fixture": {
+            "team": team_name,
+            "opponent": opponent_name,
+            "venue": venue,
+            "date": next_fixture.get("date"),
+        },
         "league_table": league_table,
-        "home_context": home_context,
-        "away_context": away_context,
+        "team_context": team_context,
+        "opponent_context": opponent_context,
         "comparison": comparison,
     }
 
@@ -1054,15 +943,15 @@ def identify_key_insights(
 ) -> list[dict]:
     """
     Identify the most important statistical advantages
-    from a team comparison.
+    from the perspective of the selected team.
     """
 
     insights = []
 
     differences = comparison["differences"]
 
-    home_team = comparison["home_team"]["team"]
-    away_team = comparison["away_team"]["team"]
+    team = comparison["team"]["name"]
+    opponent = comparison["opponent"]["name"]
 
     thresholds = {
         "season_ppg": 0.50,
@@ -1079,45 +968,59 @@ def identify_key_insights(
 
     for metric, threshold in thresholds.items():
 
-        value = differences[metric]
+        value = differences.get(metric)
+
+        if value is None:
+            continue
 
         if abs(value) < threshold:
             continue
 
         stronger_team = (
-            home_team
+            team
             if value > 0
-            else away_team
+            else opponent
         )
 
-        insights.append({
-            "metric": metric,
-            "team": stronger_team,
-            "difference": round(value, 2),
-        })
+        insights.append(
+            {
+                "metric": metric,
+                "team": stronger_team,
+                "difference": round(
+                    abs(value),
+                    2,
+                ),
+            }
+        )
 
     return insights
 
 
 def build_match_context(
     fixture: dict,
-    home_context: dict,
-    away_context: dict,
+    team_context: dict,
+    opponent_context: dict,
     comparison: dict,
     insights: list[dict],
 ) -> dict:
     """
-    Combine every stage of the analysis into one object.
+    Combine every stage of the analysis into one
+    team-perspective analysis object.
     """
 
     return {
-        "analysis_date": home_context["analysis_date"],
+        "analysis_date": team_context["analysis_date"],
 
-        "fixture": fixture,
+        "fixture": {
+            "team": team_context["team"],
+            "opponent": opponent_context["team"],
+            "venue": fixture["venue"],
+            "date": fixture.get("date"),
+        },
 
-        "home_team": home_context,
+        "team": team_context,
 
-        "away_team": away_context,
+        "opponent": opponent_context,
 
         "comparison": comparison,
 
@@ -1125,61 +1028,18 @@ def build_match_context(
     }
 
 
-def analyse_fixture(
-    data: pd.DataFrame,
-    team: str,
-    league: str,
-    analysis_date: str | pd.Timestamp,
-) -> dict:
-    """
-    Analyse a team's next fixture and return a complete match context.
-    """
-
-    fixture_analysis = build_fixture_comparison(
-        data=data,
-        team=team,
-        league=league,
-        analysis_date=analysis_date,
-    )
-
-    comparison = fixture_analysis["comparison"]
-
-    insights = identify_key_insights(
-        comparison
-    )
-
-    return build_match_context(
-        fixture=fixture_analysis["fixture"],
-        home_context=fixture_analysis["home_context"],
-        away_context=fixture_analysis["away_context"],
-        comparison=comparison,
-        insights=insights,
-    )
-
-
 def main():
 
-    analysis_date = "2024-10-01"
+    from tools import analyse_team_fixture
 
-    league = "Premier League"
 
-    team = "Liverpool"
-
-    data = load_match_data()
-
-    match_context = analyse_fixture(
-
-        data=data,
-
-        team=team,
-
-        league=league,
-
-        analysis_date=analysis_date,
-
+    result = analyse_team_fixture(
+        team="Liverpool",
+        league="Premier League",
+        analysis_date="2024-10-01",
     )
 
-    pprint(match_context)
+    print(result["fixture"])
 
 if __name__ == "__main__":
     main()

@@ -85,4 +85,3 @@ def load_match_data(
     )
 
     return data
-

@@ -1,7 +1,7 @@
-from models import OppositionReport
+from models import OppositionReport, TeamProfileReport
 
 
-def format_report(
+def format_opposition_report(
     report: OppositionReport,
 ) -> str:
     """
@@ -81,3 +81,82 @@ def format_report(
         )
 
     return "\n\n".join(output)
+
+
+def format_team_profile_report(
+    report: TeamProfileReport,
+) -> str:
+    """
+    Convert a TeamProfileReport into markdown.
+    """
+
+    output = []
+
+    output.append(
+        "# Team Profile Analysis\n"
+    )
+
+    output.append(
+        "## Executive Summary\n"
+    )
+
+    output.append(
+        report.executive_summary
+    )
+
+    output.append(
+        "\n## Strengths\n"
+    )
+
+    for strength in report.strengths:
+        output.append(
+            f"- {strength}"
+        )
+
+    output.append(
+        "\n## Weaknesses\n"
+    )
+
+    for weakness in report.weaknesses:
+        output.append(
+            f"- {weakness}"
+        )
+
+    output.append(
+        "\n## Key Metrics\n"
+    )
+
+    for metric in report.key_metrics:
+        output.append(
+            f"- {metric}"
+        )
+
+    return "\n\n".join(output)
+
+
+def format_report(
+    report,
+) -> str:
+    """
+    Format any supported report type.
+    """
+
+    if isinstance(
+        report,
+        OppositionReport,
+    ):
+        return format_opposition_report(
+            report
+        )
+
+    if isinstance(
+        report,
+        TeamProfileReport,
+    ):
+        return format_team_profile_report(
+            report
+        )
+
+    raise ValueError(
+        f"Unsupported report type: {type(report)}"
+    )

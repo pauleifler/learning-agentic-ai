@@ -54,6 +54,14 @@ Rules:
 - Every claim must be directly supported by a supplied metric, ranking, or comparison.
 - Avoid subjective football language such as mentality, resilience, organisation, confidence, or pressure unless directly measured by the data.
 - Do not infer tactical explanations from statistical differences alone.
+- Do not describe metrics using subjective labels such as:
+    - strong mentality
+    - resilience
+    - discipline issues
+    - confidence
+    - dominance
+unless directly supported by measurable evidence.
+- Always tie conclusions to specific statistics.
 - Avoid repeating the same statistic in multiple sections.
 - Prioritise new insight in each section.
 - Write concise professional analyst notes.

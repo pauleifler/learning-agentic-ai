@@ -1030,16 +1030,22 @@ def build_match_context(
 
 def main():
 
-    from tools import analyse_team_fixture
+    from agent import run_agent
+    from report_formatter import format_report
 
 
-    result = analyse_team_fixture(
-        team="Liverpool",
-        league="Premier League",
-        analysis_date="2024-10-01",
+    report = run_agent(
+        "Analyse Liverpool's next opponent"
     )
 
-    print(result["fixture"])
+
+    formatted_report = format_report(
+        report
+    )
+
+
+    print(formatted_report)
+
 
 if __name__ == "__main__":
     main()

@@ -20,3 +20,7 @@ def analyse_team_fixture(
         league=league,
         analysis_date=analysis_date,
     )
+
+tool_registry = {
+    "analyse_team_fixture": analyse_team_fixture
+}

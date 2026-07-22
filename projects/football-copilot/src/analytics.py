@@ -2,75 +2,6 @@ import pandas as pd
 
 from data_processing import get_team_matches, normalise_analysis_date
 
-def build_team_profile(
-    team_results: pd.DataFrame,
-) -> dict:
-    """
-    Build a complete performance profile for a team.
-    """
-
-    season = summarise_matches(team_results)
-
-    recent = summarise_matches(
-        team_results.tail(6)
-    )
-
-    home = summarise_matches(
-        team_results[
-            team_results["venue"] == "home"
-        ]
-    )
-
-    away = summarise_matches(
-        team_results[
-            team_results["venue"] == "away"
-        ]
-    )
-
-    return {
-        "season": season,
-        "recent": recent,
-        "home": home,
-        "away": away,
-        "matches_played": season["matches_played"],
-        "form_change_ppg": round(
-            recent["ppg"] - season["ppg"],
-            2,
-        ),
-    }
-
-
-def build_all_team_profiles(
-        
-    data: pd.DataFrame,
-    league_table: pd.DataFrame,
-    analysis_date: str | pd.Timestamp,
-) -> dict[str, dict]:
-    """
-    Build a season profile for every team in the league table.
-    """
-
-    team_profiles = {}
-
-    for team in league_table["team"]:
-        team_matches = get_team_matches(
-            data=data,
-            team=team,
-            analysis_date=analysis_date,
-        )
-
-        team_results = add_team_match_outcomes(
-            team_matches=team_matches,
-            team=team,
-        )
-
-        team_profiles[team] = build_team_profile(
-            team_results
-        )
-
-    return team_profiles
-
-
 def calculate_league_table(
     data: pd.DataFrame,
     league: str,
@@ -178,99 +109,6 @@ def calculate_league_table(
             "points",
         ]
     ]
-
-
-def calculate_league_rankings(
-    team_profiles: dict[str, dict],
-) -> dict[str, dict]:
-    """
-    Calculate league-wide rankings from each team's season profile.
-
-    Higher values rank better for attacking metrics.
-    Lower values rank better for defensive and disciplinary metrics.
-    """
-
-    if not team_profiles:
-        return {}
-
-    higher_is_better = [
-        "points",
-        "ppg",
-        "goals_scored",
-        "goals_scored_per_game",
-        "shots",
-        "shots_per_game",
-        "shots_on_target",
-        "shots_on_target_per_game",
-        "corners",
-        "corners_per_game",
-    ]
-
-    lower_is_better = [
-        "goals_conceded",
-        "goals_conceded_per_game",
-        "shots_conceded",
-        "shots_conceded_per_game",
-        "shots_on_target_conceded",
-        "shots_on_target_conceded_per_game",
-        "corners_conceded",
-        "corners_conceded_per_game",
-        "yellow_cards",
-        "yellow_cards_per_game",
-        "red_cards",
-        "red_cards_per_game",
-    ]
-
-    rows = []
-
-    for team, profile in team_profiles.items():
-        if "season" not in profile:
-            raise ValueError(
-                f"Profile for '{team}' does not contain a season summary."
-            )
-
-        season = profile["season"]
-
-        row = {"team": team}
-
-        for metric in higher_is_better + lower_is_better:
-            if metric not in season:
-                raise ValueError(
-                    f"Season profile for '{team}' is missing "
-                    f"metric '{metric}'."
-                )
-
-            row[metric] = season[metric]
-
-        rows.append(row)
-
-    rankings_df = pd.DataFrame(rows).set_index("team")
-
-    rankings = pd.DataFrame(
-        index=rankings_df.index
-    )
-
-    for metric in higher_is_better:
-        rankings[f"{metric}_rank"] = (
-            rankings_df[metric]
-            .rank(
-                method="min",
-                ascending=False,
-            )
-            .astype(int)
-        )
-
-    for metric in lower_is_better:
-        rankings[f"{metric}_rank"] = (
-            rankings_df[metric]
-            .rank(
-                method="min",
-                ascending=True,
-            )
-            .astype(int)
-        )
-
-    return rankings.to_dict(orient="index")
 
 
 def add_team_match_outcomes(
@@ -494,6 +332,168 @@ def summarise_matches(
     }
 
 
+def build_team_profile(
+    team_results: pd.DataFrame,
+) -> dict:
+    """
+    Build a complete performance profile for a team.
+    """
+
+    season = summarise_matches(team_results)
+
+    recent = summarise_matches(
+        team_results.tail(6)
+    )
+
+    home = summarise_matches(
+        team_results[
+            team_results["venue"] == "home"
+        ]
+    )
+
+    away = summarise_matches(
+        team_results[
+            team_results["venue"] == "away"
+        ]
+    )
+
+    return {
+        "season": season,
+        "recent": recent,
+        "home": home,
+        "away": away,
+        "matches_played": season["matches_played"],
+        "form_change_ppg": round(
+            recent["ppg"] - season["ppg"],
+            2,
+        ),
+    }
+
+
+def build_team_profiles_for_league(
+        
+    data: pd.DataFrame,
+    league_table: pd.DataFrame,
+    analysis_date: str | pd.Timestamp,
+) -> dict[str, dict]:
+    """
+    Build a season profile for every team in the league table.
+    """
+
+    team_profiles = {}
+
+    for team in league_table["team"]:
+        team_matches = get_team_matches(
+            data=data,
+            team=team,
+            analysis_date=analysis_date,
+        )
+
+        team_results = add_team_match_outcomes(
+            team_matches=team_matches,
+            team=team,
+        )
+
+        team_profiles[team] = build_team_profile(
+            team_results
+        )
+
+    return team_profiles
+
+
+def calculate_league_rankings(
+    team_profiles: dict[str, dict],
+) -> dict[str, dict]:
+    """
+    Calculate league-wide rankings from each team's season profile.
+
+    Higher values rank better for attacking metrics.
+    Lower values rank better for defensive and disciplinary metrics.
+    """
+
+    if not team_profiles:
+        return {}
+
+    higher_is_better = [
+        "points",
+        "ppg",
+        "goals_scored",
+        "goals_scored_per_game",
+        "shots",
+        "shots_per_game",
+        "shots_on_target",
+        "shots_on_target_per_game",
+        "corners",
+        "corners_per_game",
+    ]
+
+    lower_is_better = [
+        "goals_conceded",
+        "goals_conceded_per_game",
+        "shots_conceded",
+        "shots_conceded_per_game",
+        "shots_on_target_conceded",
+        "shots_on_target_conceded_per_game",
+        "corners_conceded",
+        "corners_conceded_per_game",
+        "yellow_cards",
+        "yellow_cards_per_game",
+        "red_cards",
+        "red_cards_per_game",
+    ]
+
+    rows = []
+
+    for team, profile in team_profiles.items():
+        if "season" not in profile:
+            raise ValueError(
+                f"Profile for '{team}' does not contain a season summary."
+            )
+
+        season = profile["season"]
+
+        row = {"team": team}
+
+        for metric in higher_is_better + lower_is_better:
+            if metric not in season:
+                raise ValueError(
+                    f"Season profile for '{team}' is missing "
+                    f"metric '{metric}'."
+                )
+
+            row[metric] = season[metric]
+
+        rows.append(row)
+
+    rankings_df = pd.DataFrame(rows).set_index("team")
+
+    rankings = pd.DataFrame(
+        index=rankings_df.index
+    )
+
+    for metric in higher_is_better:
+        rankings[f"{metric}_rank"] = (
+            rankings_df[metric]
+            .rank(
+                method="min",
+                ascending=False,
+            )
+            .astype(int)
+        )
+
+    for metric in lower_is_better:
+        rankings[f"{metric}_rank"] = (
+            rankings_df[metric]
+            .rank(
+                method="min",
+                ascending=True,
+            )
+            .astype(int)
+        )
+
+    return rankings.to_dict(orient="index")
+
+
 def build_team_context(
     team: str,
     team_profile: dict,
@@ -555,7 +555,6 @@ def build_team_context(
         "ranks": league_rankings[team],
         "next_fixture": next_fixture,
     }
-
 
 
 def compare_teams(

@@ -6,29 +6,21 @@ from openai import OpenAI
 from pprint import pprint
 import json
 from data_loader import load_match_data
+from agent import run_agent
 
 
 def main():
 
-    from data_loader import load_match_data
-    from agent import run_agent
-    from report_formatter import format_report
-
     data = load_match_data()
+    question = "Which three Premier League teams had the best defensive record on 11 April 2025?"
 
-
-    report = run_agent(
-        "What are Liverpool's current strengths on 1st October 2024?",
-        data,
+    answer = run_agent(
+        user_message=question,
+        data=data,
     )
 
+    print(answer)
 
-    formatted_report = format_report(
-        report
-    )
-
-
-    print(formatted_report)
 
 
 if __name__ == "__main__":

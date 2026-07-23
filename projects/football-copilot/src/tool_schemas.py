@@ -185,10 +185,12 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "get_metric_rankings",
+            "name": "get_season_metric_rankings",
             "description": (
                 "Rank teams within a league using a supported performance "
-                "metric. Use this for questions about the best attack, best "
+                "metric over their recent last 6 games until the provided date. "
+                "Use this for questions when asked about the season,"
+                "for questions about the best attack, best "
                 "defence, most shots, best recent form, highest points total "
                 "or similar league-wide rankings."
             ),
@@ -237,12 +239,70 @@ tools = [
                             "The analysis cut-off date in YYYY-MM-DD format."
                         ),
                     },
-                    "limit": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 20,
+                },
+                "required": [
+                    "league",
+                    "metric",
+                    "analysis_date",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_recent_metric_rankings",
+            "description": (
+                "Rank teams within a league using a supported performance "
+                "metric over their recent last 6 games until the provided date. "
+                "Use this for questions when asked about recent games about the best attack, best "
+                "defence, most shots, best recent form, highest points total "
+                "or similar league-wide rankings."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "league": {
+                        "type": "string",
                         "description": (
-                            "Maximum number of teams to return. Defaults to 5."
+                            "The league to analyse, for example Premier League."
+                        ),
+                    },
+                    "metric": {
+                        "type": "string",
+                        "enum": [
+                            "points",
+                            "ppg",
+                            "goals_scored",
+                            "goals_scored_per_game",
+                            "goals_conceded",
+                            "goals_conceded_per_game",
+                            "shots",
+                            "shots_per_game",
+                            "shots_conceded",
+                            "shots_conceded_per_game",
+                            "shots_on_target",  
+                            "shots_on_target_per_game",
+                            "shots_on_target_conceded",
+                            "shots_on_target_conceded_per_game",
+                            "corners",
+                            "corners_per_game",
+                            "corners_conceded",
+                            "corners_conceded_per_game",
+                            "yellow_cards",
+                            "yellow_cards_per_game",
+                            "red_cards",
+                            "red_cards_per_game",
+                        ],
+                        "description": (
+                            "The performance metric used to rank the teams."
+                        ),
+                    },
+                    "analysis_date": {
+                        "type": "string",
+                        "description": (
+                            "The analysis cut-off date in YYYY-MM-DD format."
                         ),
                     },
                 },
@@ -255,5 +315,134 @@ tools = [
             },
         },
     },
-    
+    {
+        "type": "function",
+        "function": {
+            "name": "get_away_metric_rankings",
+            "description": (
+                "Rank teams within a league for away games using a supported performance "
+                "metric. Use this for questions when asked about away games about the best attack, best "
+                "defence, most shots, best recent form, highest points total "
+                "or similar league-wide rankings."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "league": {
+                        "type": "string",
+                        "description": (
+                            "The league to analyse, for example Premier League."
+                        ),
+                    },
+                    "metric": {
+                        "type": "string",
+                        "enum": [
+                            "points",
+                            "ppg",
+                            "goals_scored",
+                            "goals_scored_per_game",
+                            "goals_conceded",
+                            "goals_conceded_per_game",
+                            "shots",
+                            "shots_per_game",
+                            "shots_conceded",
+                            "shots_conceded_per_game",
+                            "shots_on_target",  
+                            "shots_on_target_per_game",
+                            "shots_on_target_conceded",
+                            "shots_on_target_conceded_per_game",
+                            "corners",
+                            "corners_per_game",
+                            "corners_conceded",
+                            "corners_conceded_per_game",
+                            "yellow_cards",
+                            "yellow_cards_per_game",
+                            "red_cards",
+                            "red_cards_per_game",
+                        ],
+                        "description": (
+                            "The performance metric used to rank the teams."
+                        ),
+                    },
+                    "analysis_date": {
+                        "type": "string",
+                        "description": (
+                            "The analysis cut-off date in YYYY-MM-DD format."
+                        ),
+                    },
+                },
+                "required": [
+                    "league",
+                    "metric",
+                    "analysis_date",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_home_metric_rankings",
+            "description": (
+                "Rank teams within a league for away games using a supported performance "
+                "metric. Use this for questions when asked about home games about the best attack, best "
+                "defence, most shots, best recent form, highest points total "
+                "or similar league-wide rankings."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "league": {
+                        "type": "string",
+                        "description": (
+                            "The league to analyse, for example Premier League."
+                        ),
+                    },
+                    "metric": {
+                        "type": "string",
+                        "enum": [
+                            "points",
+                            "ppg",
+                            "goals_scored",
+                            "goals_scored_per_game",
+                            "goals_conceded",
+                            "goals_conceded_per_game",
+                            "shots",
+                            "shots_per_game",
+                            "shots_conceded",
+                            "shots_conceded_per_game",
+                            "shots_on_target",  
+                            "shots_on_target_per_game",
+                            "shots_on_target_conceded",
+                            "shots_on_target_conceded_per_game",
+                            "corners",
+                            "corners_per_game",
+                            "corners_conceded",
+                            "corners_conceded_per_game",
+                            "yellow_cards",
+                            "yellow_cards_per_game",
+                            "red_cards",
+                            "red_cards_per_game",
+                        ],
+                        "description": (
+                            "The performance metric used to rank the teams."
+                        ),
+                    },
+                    "analysis_date": {
+                        "type": "string",
+                        "description": (
+                            "The analysis cut-off date in YYYY-MM-DD format."
+                        ),
+                    },
+                },
+                "required": [
+                    "league",
+                    "metric",
+                    "analysis_date",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    },
 ]

@@ -400,12 +400,59 @@ def build_team_profiles_for_league(
 
     return team_profiles
 
+import pandas as pd
 
-def calculate_league_rankings(
+
+HIGHER_IS_BETTER = [
+    "points",
+    "ppg",
+    "goals_scored",
+    "goals_scored_per_game",
+    "shots",
+    "shots_per_game",
+    "shots_on_target",
+    "shots_on_target_per_game",
+    "corners",
+    "corners_per_game",
+]
+
+
+LOWER_IS_BETTER = [
+    "goals_conceded",
+    "goals_conceded_per_game",
+    "shots_conceded",
+    "shots_conceded_per_game",
+    "shots_on_target_conceded",
+    "shots_on_target_conceded_per_game",
+    "corners_conceded",
+    "corners_conceded_per_game",
+    "yellow_cards",
+    "yellow_cards_per_game",
+    "red_cards",
+    "red_cards_per_game",
+]
+
+
+VALID_PROFILE_SECTIONS = {
+    "season",
+    "recent",
+    "home",
+    "away",
+}
+
+
+def calculate_rankings(
     team_profiles: dict[str, dict],
+    profile_section: str,
 ) -> dict[str, dict]:
     """
-    Calculate league-wide rankings from each team's season profile.
+    Calculate league-wide rankings for one profile section.
+
+    Supported sections:
+    - season
+    - recent_form
+    - home
+    - away
 
     Higher values rank better for attacking metrics.
     Lower values rank better for defensive and disciplinary metrics.
@@ -414,64 +461,41 @@ def calculate_league_rankings(
     if not team_profiles:
         return {}
 
-    higher_is_better = [
-        "points",
-        "ppg",
-        "goals_scored",
-        "goals_scored_per_game",
-        "shots",
-        "shots_per_game",
-        "shots_on_target",
-        "shots_on_target_per_game",
-        "corners",
-        "corners_per_game",
-    ]
+    if profile_section not in VALID_PROFILE_SECTIONS:
+        raise ValueError(
+            f"Unsupported profile section: '{profile_section}'. "
+            f"Supported sections are: {sorted(VALID_PROFILE_SECTIONS)}"
+        )
 
-    lower_is_better = [
-        "goals_conceded",
-        "goals_conceded_per_game",
-        "shots_conceded",
-        "shots_conceded_per_game",
-        "shots_on_target_conceded",
-        "shots_on_target_conceded_per_game",
-        "corners_conceded",
-        "corners_conceded_per_game",
-        "yellow_cards",
-        "yellow_cards_per_game",
-        "red_cards",
-        "red_cards_per_game",
-    ]
-
+    metrics = HIGHER_IS_BETTER + LOWER_IS_BETTER
     rows = []
 
     for team, profile in team_profiles.items():
-        if "season" not in profile:
+        if profile_section not in profile:
             raise ValueError(
-                f"Profile for '{team}' does not contain a season summary."
+                f"Profile for '{team}' does not contain "
+                f"section '{profile_section}'."
             )
 
-        season = profile["season"]
-
+        summary = profile[profile_section]
         row = {"team": team}
 
-        for metric in higher_is_better + lower_is_better:
-            if metric not in season:
+        for metric in metrics:
+            if metric not in summary:
                 raise ValueError(
-                    f"Season profile for '{team}' is missing "
-                    f"metric '{metric}'."
+                    f"Profile section '{profile_section}' for "
+                    f"'{team}' is missing metric '{metric}'."
                 )
 
-            row[metric] = season[metric]
+            row[metric] = summary[metric]
 
         rows.append(row)
 
     rankings_df = pd.DataFrame(rows).set_index("team")
 
-    rankings = pd.DataFrame(
-        index=rankings_df.index
-    )
+    rankings = pd.DataFrame(index=rankings_df.index)
 
-    for metric in higher_is_better:
+    for metric in HIGHER_IS_BETTER:
         rankings[f"{metric}_rank"] = (
             rankings_df[metric]
             .rank(
@@ -481,7 +505,7 @@ def calculate_league_rankings(
             .astype(int)
         )
 
-    for metric in lower_is_better:
+    for metric in LOWER_IS_BETTER:
         rankings[f"{metric}_rank"] = (
             rankings_df[metric]
             .rank(
@@ -492,6 +516,49 @@ def calculate_league_rankings(
         )
 
     return rankings.to_dict(orient="index")
+
+def calculate_season_rankings(
+    team_profiles: dict[str, dict],
+) -> dict[str, dict]:
+    """Calculate rankings using full-season performance."""
+
+    return calculate_rankings(
+        team_profiles=team_profiles,
+        profile_section="season",
+    )
+
+
+def calculate_recent_rankings(
+    team_profiles: dict[str, dict],
+) -> dict[str, dict]:
+    """Calculate rankings using each team's most recent six matches."""
+
+    return calculate_rankings(
+        team_profiles=team_profiles,
+        profile_section="recent",
+    )
+
+
+def calculate_home_rankings(
+    team_profiles: dict[str, dict],
+) -> dict[str, dict]:
+    """Calculate rankings using home-match performance."""
+
+    return calculate_rankings(
+        team_profiles=team_profiles,
+        profile_section="home",
+    )
+
+
+def calculate_away_rankings(
+    team_profiles: dict[str, dict],
+) -> dict[str, dict]:
+    """Calculate rankings using away-match performance."""
+
+    return calculate_rankings(
+        team_profiles=team_profiles,
+        profile_section="away",
+    )
 
 
 def build_team_context(

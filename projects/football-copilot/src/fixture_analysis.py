@@ -5,7 +5,10 @@ from analytics import (
     identify_key_insights,
     calculate_league_table,
     build_team_profiles_for_league,
-    calculate_league_rankings,
+    calculate_season_rankings,
+    calculate_recent_rankings,
+    calculate_away_rankings,
+    calculate_home_rankings,
     build_team_context,
     compare_teams as compare_team_contexts,
 )
@@ -137,9 +140,20 @@ def build_team_comparison(
         analysis_date=analysis_date,
     )
 
-    league_rankings = calculate_league_rankings(
-        team_profiles=team_profiles,
-    )
+    league_rankings = {
+        "season": calculate_season_rankings(
+            team_profiles=team_profiles,
+        ),
+        "recent": calculate_recent_rankings(
+            team_profiles=team_profiles,
+        ),
+        "home": calculate_home_rankings(
+            team_profiles=team_profiles,
+        ),
+        "away": calculate_away_rankings(
+            team_profiles=team_profiles,
+        ),
+    }
 
     for club in [team, opponent]:
         if club not in team_profiles:

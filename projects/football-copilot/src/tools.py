@@ -8,7 +8,7 @@ from fixture_analysis import (
 from analytics import (
     build_team_profiles_for_league,
     calculate_league_table,
-    calculate_league_rankings
+    calculate_rankings
 )
 
 VALID_LEAGUES = {
@@ -19,10 +19,13 @@ VALID_LEAGUES = {
 }
 
 TEAM_ALIASES = {
-    "Manchester City": "Man City",
-    "Manchester United": "Man United",
-    "Nottingham Forest": "Nott'm Forest",
-    "West Bromich Albion": "WBA",
+    "manchester city": "Man City",
+    "manchester united": "Man United",
+    "manchester u": "Man United",
+    "man Utd": "Man United",
+    "Nottingham forest": "Nott'm Forest",
+    "west bromich albion": "WBA",
+    "queens park rangers":"QPR",
 }
 
 METRIC_CONFIG = {
@@ -103,12 +106,12 @@ def get_nested_value(
 def normalise_team_name(team: str) -> str:
     """Convert common team-name variations to dataset names."""
 
-    cleaned_team = team.strip()
+    cleaned_team = team.strip().lower()
 
     if not cleaned_team:
         raise ValueError("Team name cannot be empty.")
 
-    return TEAM_ALIASES.get(cleaned_team, cleaned_team)
+    return TEAM_ALIASES.get(cleaned_team, team.strip())
 
 def validate_league(league: str) -> None:
     if league not in VALID_LEAGUES:
@@ -251,9 +254,9 @@ def get_metric_rankings(
     league: str,
     metric: str,
     analysis_date: str,
-    limit: int = 5,
+    profile_section: str,
 ) -> dict:
-    """Return teams ranked by a supported league-wide metric."""
+    """Return teams ranked by a supported metric for one profile section."""
 
     supported_metrics = {
         "points",
@@ -280,14 +283,24 @@ def get_metric_rankings(
         "red_cards_per_game",
     }
 
+    supported_sections = {
+        "season",
+        "recent",
+        "home",
+        "away",
+    }
+
     if metric not in supported_metrics:
         raise ValueError(
             f"Unsupported metric: '{metric}'. "
             f"Supported metrics are: {sorted(supported_metrics)}"
         )
 
-    if limit < 1:
-        raise ValueError("Limit must be at least 1.")
+    if profile_section not in supported_sections:
+        raise ValueError(
+            f"Unsupported profile section: '{profile_section}'. "
+            f"Supported sections are: {sorted(supported_sections)}"
+        )
 
     league_table = calculate_league_table(
         data=data,
@@ -301,18 +314,18 @@ def get_metric_rankings(
         analysis_date=analysis_date,
     )
 
-    rankings = calculate_league_rankings(
+    rankings = calculate_rankings(
         team_profiles=team_profiles,
+        profile_section=profile_section,
     )
 
     if not rankings:
         raise ValueError(
-            f"No rankings are available for {league} "
-            f"on {analysis_date}."
+            f"No {profile_section} rankings are available for "
+            f"{league} on {analysis_date}."
         )
 
     rank_key = f"{metric}_rank"
-
     ranking_rows = []
 
     for team, team_ranks in rankings.items():
@@ -321,7 +334,7 @@ def get_metric_rankings(
                 f"Ranking '{rank_key}' is missing for '{team}'."
             )
 
-        metric_value = team_profiles[team]["season"][metric]
+        metric_value = team_profiles[team][profile_section][metric]
 
         ranking_rows.append(
             {
@@ -341,11 +354,79 @@ def get_metric_rankings(
     return {
         "league": league,
         "analysis_date": analysis_date,
+        "profile_section": profile_section,
         "metric": metric,
         "rank_key": rank_key,
         "teams_ranked": len(ranking_rows),
-        "rankings": ranking_rows[:limit],
+        "rankings": ranking_rows,
     }
+
+def get_season_metric_rankings(
+    data: pd.DataFrame,
+    league: str,
+    metric: str,
+    analysis_date: str
+) -> dict:
+    """Return season-wide metric rankings."""
+
+    return get_metric_rankings(
+        data=data,
+        league=league,
+        metric=metric,
+        analysis_date=analysis_date,
+        profile_section="season",
+    )
+
+
+def get_recent_metric_rankings(
+    data: pd.DataFrame,
+    league: str,
+    metric: str,
+    analysis_date: str
+) -> dict:
+    """Return metric rankings from each team's last six matches."""
+
+    return get_metric_rankings(
+        data=data,
+        league=league,
+        metric=metric,
+        analysis_date=analysis_date,
+        profile_section="recent",
+    )
+
+
+def get_home_metric_rankings(
+    data: pd.DataFrame,
+    league: str,
+    metric: str,
+    analysis_date: str
+) -> dict:
+    """Return home-only metric rankings."""
+
+    return get_metric_rankings(
+        data=data,
+        league=league,
+        metric=metric,
+        analysis_date=analysis_date,
+        profile_section="home",
+    )
+
+
+def get_away_metric_rankings(
+    data: pd.DataFrame,
+    league: str,
+    metric: str,
+    analysis_date: str
+) -> dict:
+    """Return away-only metric rankings."""
+
+    return get_metric_rankings(
+        data=data,
+        league=league,
+        metric=metric,
+        analysis_date=analysis_date,
+        profile_section="away",
+    )
 
 
 tool_registry = {
@@ -354,5 +435,8 @@ tool_registry = {
     "get_team_profile": get_team_profile,
     "get_league_table": get_league_table,
     "compare_team_at_position": compare_team_at_position,
-    "get_metric_rankings": get_metric_rankings,
+    "get_away_metric_rankings": get_away_metric_rankings,
+    "get_home_metric_rankings": get_home_metric_rankings,
+    "get_recent_metric_rankings": get_recent_metric_rankings,
+    "get_season_metric_rankings": get_season_metric_rankings,
 }

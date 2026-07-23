@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Literal
+from typing import Literal, Any, TypedDict
 
 
 class AnalysisPlan(BaseModel):
@@ -78,3 +78,19 @@ class TeamProfileReport(BaseModel):
     key_metrics: list[str] = Field(
         description="Important supporting statistics."
     )
+
+class ToolCallRecord(TypedDict, total=False):
+
+    """Details of a tool called during an agent run."""
+
+    name: str
+    arguments: dict[str, Any]
+    success: bool
+    error: str
+
+class AgentResult(TypedDict):
+
+    """Structured result returned by the football agent."""
+
+    answer: str
+    tool_calls: list[ToolCallRecord]

@@ -7,6 +7,9 @@ from openai import OpenAI
 from tool_schemas import tools
 from tools import tool_registry
 
+from typing import Any
+from models import AgentResult, ToolCallRecord
+
 
 load_dotenv()
 
@@ -39,12 +42,35 @@ Use get_league_table when:
 - The user asks to see a league table.
 - The user asks which team is top, bottom or in a particular position.
 
-Use get_metric_rankings when:
-- The user asks which teams rank highest or lowest for a statistic.
-- The user asks who has the best attack or defence.
-- The user asks which teams take or concede the most shots.
-- The user asks which teams have the best recent form.
-- The user asks for the top or bottom teams according to a performance metric.
+Ranking tools
+
+There are four separate ranking tools.
+
+- get_season_metric_rankings
+  Use when the user asks about overall season performance or league rankings.
+
+- get_recent_metric_rankings
+  Use when the user asks about recent form, current form, momentum or the last six matches.
+
+- get_home_metric_rankings
+  Use when the user asks specifically about home performance.
+
+- get_away_metric_rankings
+  Use when the user asks specifically about away performance.
+
+  Examples
+
+"Who has the best recent attack?"
+→ get_recent_metric_rankings
+
+"Who has the best home defence?"
+→ get_home_metric_rankings
+
+"Who has the best away record?"
+→ get_away_metric_rankings
+
+"Who has the best defence this season?"
+→ get_season_metric_rankings
 
 Metric interpretation:
 - Best attack: goals_scored_per_game
@@ -108,20 +134,46 @@ def execute_tool(
 
 def run_agent(
     user_message: str,
+    conversation_history: list[dict],
     data: pd.DataFrame,
-) -> str:
-    """Run the football agent until it produces a final answer."""
+) -> AgentResult:
+    """
+    Run the football agent until it produces a final answer.
+
+    Returns the final answer together with details of every
+    tool called during the agent run.
+    """
 
     messages = [
         {
             "role": "system",
             "content": SYSTEM_PROMPT,
-        },
+        }
+    ]
+
+    for message in conversation_history:
+        messages.append(
+            {
+                "role": "user",
+                "content": message["question"],
+            }
+        )
+
+        messages.append(
+            {
+                "role": "assistant",
+                "content": message["answer"],
+            }
+        )
+
+    messages.append(
         {
             "role": "user",
             "content": user_message,
-        },
-    ]
+        }
+    )
+
+    tool_calls_used: list[ToolCallRecord] = []
 
     while True:
         response = client.chat.completions.create(
@@ -133,16 +185,20 @@ def run_agent(
 
         assistant_message = response.choices[0].message
 
-        # The assistant message must be preserved before tool results
-        # are added to the conversation.
+        # Preserve the assistant's tool-call request before
+        # adding the tool results.
         messages.append(assistant_message)
 
-        # No tool calls means the model has completed its answer.
+        # No tool calls means the model has produced its final answer.
         if not assistant_message.tool_calls:
-            return assistant_message.content or ""
+            return {
+                "answer": assistant_message.content or "",
+                "tool_calls": tool_calls_used,
+            }
 
         for tool_call in assistant_message.tool_calls:
             tool_name = tool_call.function.name
+            arguments: dict[str, Any] = {}
 
             try:
                 arguments = json.loads(
@@ -159,12 +215,26 @@ def run_agent(
                 )
 
                 print("\nTool result:")
-                print(json.dumps(result, indent=2, default=str))
+                print(
+                    json.dumps(
+                        result,
+                        indent=2,
+                        default=str,
+                    )
+                )
 
                 tool_output = {
                     "success": True,
                     "result": result,
                 }
+
+                tool_calls_used.append(
+                    {
+                        "name": tool_name,
+                        "arguments": arguments,
+                        "success": True,
+                    }
+                )
 
             except json.JSONDecodeError as error:
                 tool_output = {
@@ -172,11 +242,29 @@ def run_agent(
                     "error": f"Invalid tool arguments: {error}",
                 }
 
+                tool_calls_used.append(
+                    {
+                        "name": tool_name,
+                        "arguments": {},
+                        "success": False,
+                        "error": str(error),
+                    }
+                )
+
             except Exception as error:
                 tool_output = {
                     "success": False,
                     "error": str(error),
                 }
+
+                tool_calls_used.append(
+                    {
+                        "name": tool_name,
+                        "arguments": arguments,
+                        "success": False,
+                        "error": str(error),
+                    }
+                )
 
             messages.append(
                 {

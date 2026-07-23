@@ -12,7 +12,7 @@ from agent import run_agent
 def main():
 
     data = load_match_data()
-    question = "Compare Liverpool and Arsenal on 11 April 2025."
+    question = "Which three Premier League teams had the best defensive record on 11 April 2025?"
 
     answer = run_agent(
         user_message=question,

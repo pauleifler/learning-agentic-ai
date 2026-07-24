@@ -592,10 +592,17 @@ def build_team_context(
             f"Team '{team}' was not found in the league table."
         )
 
-    if team not in league_rankings:
-        raise ValueError(
-            f"Rankings were not found for team '{team}'."
-        )
+    for section, rankings in league_rankings.items():
+        if team not in rankings:
+            raise ValueError(
+                f"{section.title()} rankings were not found "
+                f"for team '{team}'."
+            )
+
+    team_rankings = {
+        section: rankings[team]
+        for section, rankings in league_rankings.items()
+    }
 
     team_row = team_row.iloc[0]
 
@@ -619,7 +626,7 @@ def build_team_context(
             "points": int(team_row["points"]),
             "league_size": len(league_table),
         },
-        "ranks": league_rankings[team],
+        "ranks": team_rankings,
         "next_fixture": next_fixture,
     }
 

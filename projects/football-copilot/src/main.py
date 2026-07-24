@@ -10,6 +10,7 @@ from agent import run_agent
 from datetime import date
 from typing import Any
 from models import AgentResult
+from langchain_experiment import create_compare_teams_tool
 
 def ask_football_copilot(
     user_question: str,
@@ -53,20 +54,18 @@ def main():
 
     data = load_match_data()
 
-    question = (
-        "Which three teams had the best defensive record "
-        "on 11 April 2025?"
+    compare_teams_tool = create_compare_teams_tool(data)
+
+    result = compare_teams_tool.invoke(
+        {
+            "team": "QPR",
+            "opponent": "Norwich",
+            "league": "Championship",
+            "analysis_date": "2025-04-11",
+        }
     )
 
-    answer = ask_football_copilot(
-        user_question=question,
-        data=data,
-        league="Premier League",
-    )
-
-    print(answer)
-
-
-
+    print("\nTool result:")
+    pprint(result)
 if __name__ == "__main__":
     main()
